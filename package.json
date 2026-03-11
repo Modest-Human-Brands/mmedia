@@ -1,0 +1,47 @@
+{
+  "name": "mmedia",
+  "version": "0.0.1",
+  "description": "",
+  "author": "Shirsendu Bairagi <shirsendu2001@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Modest-Human-Brands/mmedia.git"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": "^20.15.0 || ^22.11.0",
+    "pnpm": "^9.15.0 || ^10.2.0",
+    "bun": "^1.2.9"
+  },
+  "packageManager": "bun@1.3.10",
+  "scripts": {
+    "prepare": "husky || true",
+    "dev": "sh -c \"iii-cli -c iii-config.yaml & iii-cli console --enable-flow\"",
+    "detect": "gitleaks git --verbose",
+    "lint": "eslint . --fix",
+    "format": "prettier . --write",
+    "build": "motia build",
+    "start": "motia start",
+    "clean": "rm -rf .motia dist",
+    "docker:build": "docker build --build-arg VERSION=dev --build-arg BUILD_TIME=now -t mdrive:dev .",
+    "docker:start": "docker run --detach --name mdrive-dev --env-file .env.prod -p 3500:3000 mdrive:dev"
+  },
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.54.1",
+    "execa": "^9.6.1",
+    "motia": "1.0.0-rc.24",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.4.3",
+    "@commitlint/config-conventional": "^20.4.3",
+    "@types/node": "^24.10.1",
+    "eslint": "^10.0.3",
+    "eslint-plugin-import": "^2.32.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  }
+}
