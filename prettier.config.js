@@ -3,10 +3,10 @@
  * @type {import("prettier").Config}
  */
 export default {
-	bracketSameLine: true,
-	printWidth: 200,
-	trailingComma: 'es5',
-	semi: false,
-	singleQuote: true,
-	plugins: [],
+  bracketSameLine: true,
+  printWidth: 200,
+  trailingComma: 'es5',
+  semi: false,
+  singleQuote: true,
+  plugins: [],
 }
