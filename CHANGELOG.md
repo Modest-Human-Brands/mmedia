@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.0.3
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.0.2...v0.0.3)
+
+### 🩹 Fixes
+
+- Ensure proper type casting for OME_API_AUTH key ([9c1c8c5](https://github.com/Modest-Human-Brands/mmedia/commit/9c1c8c5))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi <shirsendu2001@gmail.com>
+
 ## v0.0.2
 
 ### 🚀 Enhancements
