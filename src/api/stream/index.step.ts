@@ -5,7 +5,7 @@ import { $fetch } from 'ofetch'
 import { getSrtUrl, getHlsUrl } from './start.step'
 
 export const OME_API_HOST = `${import.meta.env.MOTIA_OME_API_PROTOCOL}://${import.meta.env.MOTIA_OME_HOST}:${import.meta.env.MOTIA_OME_API_PORT}/v1`
-export const OME_API_AUTH = { Authorization: `Basic ${btoa(`${import.meta.env.MOTIA_OME_API_KEY}`)}` }
+export const OME_API_AUTH = { Authorization: `Basic ${btoa(import.meta.env.MOTIA_OME_API_KEY as string)}` }
 
 export const config = {
   name: 'StreamAllStatus',
