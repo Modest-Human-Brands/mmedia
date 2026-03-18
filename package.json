@@ -1,6 +1,6 @@
 {
   "name": "mmedia",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "An event-driven media processing and streaming service handling on-the-fly image optimization, background video/audio transcoding with adaptive bitrate, and live RTMP/SRT/WebRTC ingest to HLS pipeline",
   "author": "Shirsendu Bairagi <shirsendu2001@gmail.com>",
   "license": "MIT",
