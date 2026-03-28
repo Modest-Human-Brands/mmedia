@@ -41,9 +41,11 @@ export const handler: Handlers<typeof config> = async (_) => {
   } catch (error) {
     console.error('API media/index GET', error)
 
-    /*  throw createError({
-       statusCode: 500,
-       statusMessage: 'Some Unknown Error Found',
-     }) */
+    throw new Error(
+      JSON.stringify({
+        statusCode: 500,
+        statusMessage: 'Some Unknown Error Found',
+      })
+    )
   }
 }
