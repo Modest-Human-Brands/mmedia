@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.1
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.0...v0.1.1)
+
+### 🏡 Chore
+
+- Deps updated ([1ddfc4f](https://github.com/Modest-Human-Brands/mmedia/commit/1ddfc4f))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.0
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.0.3...v0.1.0)
