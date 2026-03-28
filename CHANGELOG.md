@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.0
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.0.3...v0.1.0)
+
+### 🚀 Enhancements
+
+- ⚠️ Transcoding media added ([ad7e9bf](https://github.com/Modest-Human-Brands/mmedia/commit/ad7e9bf))
+
+### 🏡 Chore
+
+- Update dependencies and package manager version ([03f5605](https://github.com/Modest-Human-Brands/mmedia/commit/03f5605))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️ Transcoding media added ([ad7e9bf](https://github.com/Modest-Human-Brands/mmedia/commit/ad7e9bf))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.0.3
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.0.2...v0.0.3)
