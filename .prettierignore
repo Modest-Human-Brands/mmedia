@@ -26,5 +26,5 @@ logs
 .env*
 !.env.example
 
+# Static
 static
-temp

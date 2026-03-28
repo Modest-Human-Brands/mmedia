@@ -1,60 +1,137 @@
-import { http, logger, type Handlers, type StepConfig } from 'motia'
+import { type Handlers, http, logger, type StepConfig } from 'motia'
 import { z } from 'zod'
-import syncDrive from 'src/utils/sync-drive'
+import mime from 'mime-types'
+import { createWriteStream } from 'node:fs'
+import { Writable } from 'node:stream'
+import { createStorage } from 'unstorage'
+import fsDriver from 'unstorage/drivers/fs'
 
-const mediaSchema = z.object({
-  slug: z.string(),
-  type: z.enum(['photo', 'video']),
-  title: z.string(),
-  thumbnailUrl: z.string(),
-  metadata: z.object({
-    size: z.number(),
-    bitDepth: z.string(),
-    resolution: z.string(),
-    fps: z.number().optional(),
-  }),
-})
+import transcodeImage from 'src/utils/transcode-image'
+import transcodeVideo from 'src/utils/transcode-video'
+import ensureDir from 'src/utils/ensure-dir'
+import generateThumbnail from 'src/utils/generate-thumbnail'
+import r2GetFileStream from 'src/utils/r2-get-file-stream'
 
+/**
+ * Motia Step Configuration
+ */
 export const config = {
-  name: 'MediaGet',
-  description: 'Get a single media item by slug',
-  flows: ['media-get-flow'],
+  name: 'MediaTransformer',
+  description: 'Consolidated step for image and video transcoding',
+  flows: ['media-transform-flow'],
   triggers: [
-    http('GET', '/media/:slug', {
-      responseSchema: {
-        200: mediaSchema,
-        404: z.object({ error: z.string() }),
-      },
+    http('POST', '/media', {
+      bodySchema: z.object({
+        taskType: z.enum(['transform:image', 'transform:video']),
+        payload: z.object({
+          cacheKey: z.string(),
+          mediaOriginId: z.string(),
+          modifiers: z.record(z.string(), z.string()),
+        }),
+      }),
     }),
   ],
-  enqueues: [],
 } as const satisfies StepConfig
 
+const fs = createStorage({
+  driver: fsDriver({ base: './static' }),
+})
+
+/**
+ * Step Handler
+ */
 export const handler: Handlers<typeof config> = async ({ request }) => {
-  const { slug } = request.pathParams
+  const { taskType, payload } = request.body
+  const { cacheKey, mediaOriginId, modifiers } = payload
 
-  logger.info('Fetching media', { slug })
+  logger.debug(`[MediaTransformer] Starting task: ${taskType}`, { mediaOriginId, cacheKey })
 
-  const data = await syncDrive()
-  const entry = Object.entries(data).find(([key]) => key === slug)
+  // 1. Prepare Paths and Source
+  const mediaId = encodeURI(mediaOriginId).replaceAll('/', '_')
+  const sourcePath = `./static/source/${mediaId}`
+  const storageSourceKey = `source/${mediaId}`
 
-  if (!entry) return { status: 404, body: { error: `Media not found: ${slug}` } }
+  logger.debug(`[MediaTransformer] Prepared paths`, { sourcePath, storageSourceKey })
 
-  const [key, value] = entry
+  await ensureDir('./static/source')
 
-  return {
-    status: 200,
-    body: {
-      slug: key,
-      type: key.startsWith('video-') ? 'video' : 'photo',
-      title: key,
-      thumbnailUrl: `${import.meta.env.MOTIA_DRIVE_R2_PUBLIC_URL}/${value}._thumb`,
-      metadata: {
-        size: 22,
-        bitDepth: '10 bit',
-        resolution: '1080p',
-        fps: key.startsWith('video-') ? 30 : undefined,
+  // 2. Ensure Source File Exists (Shared Logic)
+  try {
+    if (await fs.hasItem(storageSourceKey)) {
+      logger.debug(`[MediaTransformer] Source found in local storage.`)
+    } else {
+      logger.info(`[MediaTransformer] Source missing. Downloading from R2: ${mediaOriginId}`)
+
+      const { stream } = await r2GetFileStream(encodeURI(mediaOriginId), 'origin', import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
+
+      // Stream R2 content directly to local disk
+      await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
+      logger.debug(`[MediaTransformer] Download complete: ${sourcePath}`)
+    }
+
+    let finalStreamPath: string
+    let contentType: string
+
+    // 3. Execution Branching
+    if (taskType === 'transform:image') {
+      const mimeType = mime.lookup(sourcePath)
+      const isVideoSource = typeof mimeType === 'string' && mimeType.startsWith('video/')
+
+      logger.debug(`[MediaTransformer:Image] Processing branch`, { isVideoSource, mimeType })
+
+      let processingInput = sourcePath
+      if (isVideoSource) {
+        logger.info(`[MediaTransformer:Image] Extracting thumbnail from video source`)
+        await ensureDir('./static/thumbnail')
+        await generateThumbnail(sourcePath, './static/thumbnail', '00:00:00.500')
+        processingInput = `./static/thumbnail/${mediaId.replace(/\.[^/.]+$/, '.jpg')}`
+      }
+
+      logger.debug(`[MediaTransformer:Image] Calling transcodeImage`, { processingInput, modifiers })
+      const data = await transcodeImage(processingInput, modifiers)
+
+      // Ensure data is a Buffer and save to storage
+      const fileBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data as any)
+      await fs.setItemRaw(cacheKey, fileBuffer)
+
+      finalStreamPath = `./static/${cacheKey}`
+      contentType = (typeof modifiers.format === 'string' && mime.contentType(modifiers.format)) || 'image/jpeg'
+    } else {
+      // Video-specific logic
+      logger.debug(`[MediaTransformer:Video] Processing branch`)
+      const videoCachePath = `./static/cache/video`
+
+      await ensureDir('./static/cache/video')
+      await transcodeVideo(sourcePath, videoCachePath)
+
+      finalStreamPath = videoCachePath
+      contentType = (typeof modifiers.format === 'string' && mime.contentType(modifiers.format)) || 'video/mp4'
+    }
+
+    const metaData = await fs.getMeta(cacheKey)
+    const response = {
+      status: 200,
+      body: {
+        streamPath: finalStreamPath,
+        contentType,
+        byteLength: (metaData?.size as number) || 0,
       },
-    },
+    }
+
+    logger.info(`[MediaTransformer] Task successful`, response.body)
+    return response
+  } catch (error) {
+    logger.error(`[MediaTransformer] Fatal error during transformation`, error)
+    throw error // Let Motia handle the retry/failure logic
+  } finally {
+    // 4. Memory Management
+    try {
+      if (typeof Bun !== 'undefined') {
+        Bun.gc()
+        logger.debug('[MediaTransformer] Garbage collection triggered.')
+      }
+    } catch {
+      // Ignore GC errors
+    }
   }
 }

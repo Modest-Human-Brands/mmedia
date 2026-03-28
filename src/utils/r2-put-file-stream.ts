@@ -1,4 +1,5 @@
 import mimeTypes from 'mime-types'
+import r2Cdn from './r2-cdn'
 
 interface R2PutOptions {
   endpoint: string

@@ -389,5 +389,5 @@ target
 test*
 .DS_Store
 
+# Static
 static
-temp

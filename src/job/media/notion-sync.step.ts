@@ -6,7 +6,7 @@ export const config = {
   description: 'Create a Notion asset page from processed media metadata',
   flows: ['media-upload-flow'],
   triggers: [
-    queue('media.file.processed', {
+    queue('media.file.metadata.extracted', {
       input: z.object({
         slug: z.string(),
         mimeType: z.string(),

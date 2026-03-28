@@ -7,7 +7,7 @@ import getAspectRatio from 'src/utils/get-aspect-ratio'
 import calculateDimension from 'src/utils/calculate-dimension'
 
 export const config = {
-  name: 'MediaProcess',
+  name: 'GetMediaMetaData',
   description: 'Extract metadata, resolution and aspect ratio for a saved media file',
   flows: ['media-upload-flow'],
   triggers: [
@@ -22,7 +22,7 @@ export const config = {
       }),
     }),
   ],
-  enqueues: ['media.file.processed'],
+  enqueues: ['media.file.metadata.extracted'],
 } as const satisfies StepConfig
 
 export const handler: Handlers<typeof config> = async ({ slug, relPath, mimeType, size, projectSlug, traceId }) => {
@@ -46,7 +46,7 @@ export const handler: Handlers<typeof config> = async ({ slug, relPath, mimeType
   logger.info(`[${traceId}] Metadata extracted`, { slug, resolutionLabel, aspectRatioLabel })
 
   await enqueue({
-    topic: 'media.file.processed',
+    topic: 'media.file.metadata.extracted',
     data: {
       slug,
       relPath,
