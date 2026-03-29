@@ -51,22 +51,17 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
   const sourcePath = `./static/source/${mediaId}`
   const storageSourceKey = `source/${mediaId}`
 
-  logger.debug(`[MediaTransformer] Prepared paths`, { sourcePath, storageSourceKey })
-
   await ensureDir('./static/source')
 
   // 2. Ensure Source File Exists (Shared Logic)
   try {
-    if (await fs.hasItem(storageSourceKey)) {
-      logger.debug(`[MediaTransformer] Source found in local storage.`)
-    } else {
-      logger.info(`[MediaTransformer] Source missing. Downloading from R2: ${mediaOriginId}`)
+    if (!(await fs.hasItem(storageSourceKey))) {
+      logger.info(`[MediaTransformer] Downloading source from R2: ${mediaOriginId}`)
 
       const { stream } = await r2GetFileStream(encodeURI(mediaOriginId), 'origin', import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
 
       // Stream R2 content directly to local disk
       await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
-      logger.debug(`[MediaTransformer] Download complete: ${sourcePath}`)
     }
 
     let finalStreamPath: string
@@ -77,8 +72,6 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
       const mimeType = mime.lookup(sourcePath)
       const isVideoSource = typeof mimeType === 'string' && mimeType.startsWith('video/')
 
-      logger.debug(`[MediaTransformer:Image] Processing branch`, { isVideoSource, mimeType })
-
       let processingInput = sourcePath
       if (isVideoSource) {
         logger.info(`[MediaTransformer:Image] Extracting thumbnail from video source`)
@@ -86,8 +79,6 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
         await generateThumbnail(sourcePath, './static/thumbnail', '00:00:00.500')
         processingInput = `./static/thumbnail/${mediaId.replace(/\.[^/.]+$/, '.jpg')}`
       }
-
-      logger.debug(`[MediaTransformer:Image] Calling transcodeImage`, { processingInput, modifiers })
       const data = await transcodeImage(processingInput, modifiers)
 
       // Ensure data is a Buffer and save to storage
@@ -98,7 +89,6 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
       contentType = (typeof modifiers.format === 'string' && mime.contentType(modifiers.format)) || 'image/jpeg'
     } else {
       // Video-specific logic
-      logger.debug(`[MediaTransformer:Video] Processing branch`)
       const videoCachePath = `./static/cache/video`
 
       await ensureDir('./static/cache/video')
@@ -121,6 +111,12 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     logger.info(`[MediaTransformer] Task successful`, response.body)
     return response
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('VipsJpeg: premature end of JPEG image')) {
+      logger.warn(`[MediaTransformer] Corrupted source detected. Purging: ${storageSourceKey}`)
+      await fs.removeItem(storageSourceKey)
+    }
+
     logger.error(`[MediaTransformer] Fatal error during transformation`, error)
     throw error // Let Motia handle the retry/failure logic
   } finally {
@@ -128,7 +124,6 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     try {
       if (typeof Bun !== 'undefined') {
         Bun.gc()
-        logger.debug('[MediaTransformer] Garbage collection triggered.')
       }
     } catch {
       // Ignore GC errors

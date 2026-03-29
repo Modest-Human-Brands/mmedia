@@ -18,8 +18,6 @@ export const config = {
 } as const satisfies StepConfig
 
 export const handler: Handlers<typeof config> = async (_) => {
-  logger.info('Show Health Status')
-
   // com.docker.compose.service || com.docker.swarm.task.name
   const node = import.meta.env.HOSTNAME || 'unknown-node'
 
