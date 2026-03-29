@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.2
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.1...v0.1.2)
+
+### 🩹 Fixes
+
+- Auto clean corrupted files ([fbdddb5](https://github.com/Modest-Human-Brands/mmedia/commit/fbdddb5))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.1
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.0...v0.1.1)
