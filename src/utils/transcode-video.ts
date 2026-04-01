@@ -1,7 +1,6 @@
 import { execa } from 'execa'
 import path from 'node:path'
 
-// Define interfaces for better type safety
 interface ResolutionVariant {
   height: number
   videoBitrate: string // Base bitrate for this resolution
@@ -12,12 +11,10 @@ interface AudioVariant {
   channels: number
 }
 
-// Constants
 const SEGMENT_DURATION = 4
 const FPS = 30
 const GOP_SIZE = FPS * SEGMENT_DURATION
 
-// Codec definition strictly ordered as requested
 const CODECS = [
   { name: 'av1', ffmpegCodec: 'libsvtav1', ext: 'av1' },
   { name: 'hevc', ffmpegCodec: 'libx265', ext: 'hevc' },
@@ -25,17 +22,14 @@ const CODECS = [
   { name: 'avc', ffmpegCodec: 'libx264', ext: 'avc' },
 ]
 
-// Resolutions ordered descending (1920 -> 1080 -> 720)
 const VIDEO_VARIANTS: ResolutionVariant[] = [
   { height: 1920, videoBitrate: '3500k' },
   { height: 1080, videoBitrate: '2000k' },
   { height: 720, videoBitrate: '1200k' },
 ]
-
-// Exactly two audio streams as requested
 const AUDIO_VARIANTS: AudioVariant[] = [
-  { bitrate: '192k', channels: 2 }, // High quality
-  { bitrate: '128k', channels: 2 }, // Standard quality
+  { bitrate: '192k', channels: 2 },
+  { bitrate: '128k', channels: 2 },
 ]
 
 export default async function (filePath: string, outputDir: string) {
@@ -73,27 +67,18 @@ export default async function (filePath: string, outputDir: string) {
         `-c:v:${currentIdx}`,
         codec.ffmpegCodec,
         `-g:v:${currentIdx}`,
-        `${GOP_SIZE}`, // Fixed GOP
+        `${GOP_SIZE}`,
         `-keyint_min:v:${currentIdx}`,
-        `${GOP_SIZE}`, // Minimum Keyframe interval
+        `${GOP_SIZE}`,
         `-sc_threshold:v:${currentIdx}`,
-        '0', // Disable scene cut detection (CRITICAL for DASH)
+        '0',
         `-flags:v:${currentIdx}`,
-        '+cgop' // Closed GOP
+        '+cgop'
       )
 
-      // Codec Specific Optimization
       if (codec.name === 'av1') {
-        ffmpegArgs.push(
-          `-crf:v:${currentIdx}`,
-          '35',
-          `-preset:v:${currentIdx}`,
-          '8',
-          `-svtav1-params:v:${currentIdx}`,
-          `tune=0:enable-overlays=1:scm=0` // Optional SVT-AV1 tuning
-        )
+        ffmpegArgs.push(`-crf:v:${currentIdx}`, '35', `-preset:v:${currentIdx}`, '8', `-svtav1-params:v:${currentIdx}`, `tune=0:enable-overlays=1:scm=0`)
       } else {
-        // Bitrate control for non-AV1
         const bufSize = `${Number.parseInt(variant.videoBitrate) * 2}k`
         ffmpegArgs.push(`-b:v:${currentIdx}`, variant.videoBitrate, `-maxrate:v:${currentIdx}`, variant.videoBitrate, `-bufsize:v:${currentIdx}`, bufSize)
 
@@ -113,7 +98,6 @@ export default async function (filePath: string, outputDir: string) {
 
             break
           }
-          // No default
         }
       }
 
@@ -172,7 +156,6 @@ export default async function (filePath: string, outputDir: string) {
     }
   } catch (error: unknown) {
     console.error('❌ FFmpeg failed:', error)
-    // Re-throw to allow caller to handle
     throw error
   }
 }

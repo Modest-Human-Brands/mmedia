@@ -26,7 +26,7 @@ export default async function (objectKey: string, webStream: ReadableStream, byt
       body: await new Response(webStream).blob(),
     })
   } catch (error_) {
-    throw new Error('Failed to upload (network error)', { cause: error_ as unknown }) // ES2022 cause
+    throw new Error('Failed to upload (network error)', { cause: error_ as unknown })
   }
 
   if (!res.ok) {

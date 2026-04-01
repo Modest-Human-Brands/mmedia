@@ -20,7 +20,7 @@ export interface VideoStream {
 
 export interface VideoMetadata {
   format: VideoFormat
-  stream: VideoStream // Only the main video stream
+  stream: VideoStream
 }
 
 export default async function (filePath: string): Promise<VideoMetadata> {

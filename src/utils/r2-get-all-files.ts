@@ -24,7 +24,7 @@ function parseList(xml: string) {
 
 export default async function (r2: AwsClient, cfg: { endpoint: string; bucket: string }, opts: { prefix?: string; maxKeys?: number } = {}): Promise<string[]> {
   const all: string[] = []
-  const maxKeys = Math.min(Math.max(opts.maxKeys || 1000, 1), 1000) // S3 cap = 1000
+  const maxKeys = Math.min(Math.max(opts.maxKeys || 1000, 1), 1000)
   let continuationToken: string | undefined
 
   do {

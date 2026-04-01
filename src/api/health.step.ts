@@ -1,4 +1,4 @@
-import { http, logger, type Handlers, type StepConfig } from 'motia'
+import { http, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 
 export const config = {
