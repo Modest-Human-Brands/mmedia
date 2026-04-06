@@ -1,4 +1,4 @@
-import { type Handlers, logger, queue, type StepConfig } from 'motia'
+import { type Handlers, logger, queue, stateManager, type StepConfig } from 'motia'
 import { z } from 'zod'
 import mime from 'mime-types'
 import { createWriteStream } from 'node:fs'
@@ -41,7 +41,7 @@ const fs = createStorage({
 /**
  * Step Handler
  */
-export const handler: Handlers<typeof config> = async ({ taskType, payload }) => {
+export const handler: Handlers<typeof config> = async ({ taskType, payload }, { traceId }) => {
   const { cacheKey, mediaOriginId, modifiers } = payload
 
   logger.debug(`[MediaTransformer] Starting task: ${taskType}`, { mediaOriginId, cacheKey })
@@ -106,7 +106,16 @@ export const handler: Handlers<typeof config> = async ({ taskType, payload }) =>
     }
 
     logger.info(`[MediaTransformer] Task successful`, response)
-    // return response
+
+    const streamPath = `./static/${payload.cacheKey}`
+    const byteLength = 0 // replace with real value after processing
+
+    await stateManager.set('media.result', traceId, {
+      status: 'done',
+      streamPath,
+      contentType,
+      byteLength,
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     if (errorMessage.includes('VipsJpeg: premature end of JPEG image')) {

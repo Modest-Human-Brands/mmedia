@@ -1,8 +1,6 @@
-import { enqueue, type Handlers, http, type StepConfig } from 'motia'
+import { enqueue, stateManager, logger, type Handlers, http, type StepConfig } from 'motia'
 import { z } from 'zod'
-/**
- * Motia Step Configuration
- */
+
 export const config = {
   name: 'MediaTransformer',
   description: 'Consolidated step for image and video transcoding',
@@ -19,21 +17,51 @@ export const config = {
       }),
     }),
   ],
+  enqueues: ['media.transform'],
 } as const satisfies StepConfig
 
-/**
- * Step Handler
- */
-export const handler: Handlers<typeof config> = async ({ request }) => {
+const TIMEOUT_MS = 30_000
+const POLL_INTERVAL_MS = 300
+
+export const handler: Handlers<typeof config> = async ({ request }, { traceId }) => {
   const { taskType, payload } = request.body
+
+  await stateManager.set('media.result', traceId, { status: 'pending' })
 
   await enqueue({
     topic: 'media.transform',
-    data: {
-      taskType,
-      payload,
-    },
+    data: { taskType, payload, traceId },
   })
 
-  return { status: 200, body: { status: 'process started' } }
+  const deadline = Date.now() + TIMEOUT_MS
+
+  while (Date.now() < deadline) {
+    const result = await stateManager.get<{
+      status: string
+      streamPath?: string
+      contentType?: string
+      byteLength?: number
+    }>('media.result', traceId)
+
+    if (result?.status === 'done') {
+      await stateManager.delete('media.result', traceId) // cleanup
+      return {
+        status: 200,
+        body: {
+          streamPath: result.streamPath!,
+          contentType: result.contentType!,
+          byteLength: result.byteLength!,
+        },
+      }
+    }
+
+    if (result?.status === 'error') {
+      await stateManager.delete('media.result', traceId)
+      return { status: 500, body: { error: 'Media transform failed' } }
+    }
+
+    await new Promise((res) => setTimeout(res, POLL_INTERVAL_MS))
+  }
+
+  return { status: 504, body: { error: 'Timed out waiting for media transform' } }
 }
