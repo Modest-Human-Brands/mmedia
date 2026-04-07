@@ -39,7 +39,7 @@ export const handler: Handlers<typeof config> = async (_) => {
       body: result,
     }
   } catch (error) {
-    console.error('API media/index GET', error)
+    console.error('API media GET', error)
 
     throw new Error(
       JSON.stringify({
