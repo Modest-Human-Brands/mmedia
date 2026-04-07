@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.3
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.2...v0.1.3)
+
+### 🚀 Enhancements
+
+- Add media transformer step for image and video transcoding ([50d34ae](https://github.com/Modest-Human-Brands/mmedia/commit/50d34ae))
+
+### 🩹 Fixes
+
+- Enhance media transformation with state management and timeout handling ([1ec0a6c](https://github.com/Modest-Human-Brands/mmedia/commit/1ec0a6c))
+- Update error logging message in media GET handler ([7b2c2c1](https://github.com/Modest-Human-Brands/mmedia/commit/7b2c2c1))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.2
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.1...v0.1.2)
