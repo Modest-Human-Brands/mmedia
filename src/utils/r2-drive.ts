@@ -17,6 +17,7 @@ const r2DriveClientSingleton = () => {
   })
 }
 
+// eslint-disable-next-line no-shadow-restricted-names
 declare const globalThis: {
   r2DriveGlobal: ReturnType<typeof r2DriveClientSingleton>
 } & typeof globalThis

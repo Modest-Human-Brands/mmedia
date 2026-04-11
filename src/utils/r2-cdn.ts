@@ -17,6 +17,7 @@ const r2CdnClientSingleton = () => {
   })
 }
 
+// eslint-disable-next-line no-shadow-restricted-names
 declare const globalThis: {
   r2CdnGlobal: ReturnType<typeof r2CdnClientSingleton>
 } & typeof globalThis
