@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly MOTIA_OME_HOST: string
   readonly MOTIA_OME_API_PROTOCOL: string
   readonly MOTIA_OME_API_PORT: string
+  readonly MOTIA_OME_SRT_PORT: string
+  readonly MOTIA_OME_HLS_PORT: string
   readonly MOTIA_OME_API_KEY: string
 }
 

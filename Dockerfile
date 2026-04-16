@@ -8,7 +8,7 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
-RUN bunx motia build
+RUN bun run build
 
 FROM debian:bookworm-slim AS iii-installer
 
@@ -22,9 +22,9 @@ ARG VERSION
 ARG BUILD_TIME
 
 RUN apk add --no-cache \
-	--repository=https://dl-cdn.alpinelinux.org/alpine/edge/main \
-	--repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
-	ffmpeg
+  --repository=https://dl-cdn.alpinelinux.org/alpine/edge/main \
+  --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+  ffmpeg
 
 RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing steghide
 
