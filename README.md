@@ -16,12 +16,6 @@
 
 ---
 
-## What is MMedia?
-
-MDrive is a self-hostable media infrastructure layer. It handles the full lifecycle of media assets — from upload or live stream ingest, through transcoding and optimization, to CDN-backed delivery. Built on [Motia](https://motia.dev), it uses an event-driven step architecture making each pipeline stage independently scalable and observable.
-
----
-
 ## Features
 
 ### Ingest
@@ -108,73 +102,10 @@ MDrive is a self-hostable media infrastructure layer. It handles the full lifecy
 - [ ] End-to-end test suite
 - [ ] Prometheus + Grafana observability
 
----
-
-## Deployment
-
-### Prerequisites
-
-- Docker with Swarm mode
-- Cloudflare R2 bucket credentials
-
-### 1. Initialize Swarm
-
-```bash
-docker swarm init --advertise-addr <MANAGER-IP>
-```
-
-### 2. Join Worker Nodes
-
-```bash
-docker swarm join --token <WORKER-TOKEN> <MANAGER-IP>:2377
-```
-
-### 3. Verify Nodes
-
-```bash
-docker node ls
-```
-
-### 4. Create Volumes
-
-```bash
-# Mount static and .data into your deployment path
-upload static, .data into /root/MDrive
-```
-
-### 5. Deploy Stack
-
-```bash
-docker stack deploy --compose-file docker-compose.prod.yml MDrive
-```
-
-### 6. Scale Workers
-
-```bash
-docker service scale MDrive_app=2
-```
-
-### 7. Verify
-
-```bash
-docker service ls
-docker service ps MDrive_app
-```
-
----
-
-## External Dependencies
-
-- [gitleaks](https://github.com/gitleaks/gitleaks) — secret scanning in CI
-
----
-
 ## License
 
-Published under the [GNU GPLv3](https://github.com/Modest-Human-Brands/mdrive/blob/main/LICENSE) license.
-
-<br>
-
-<a href="https://github.com/Modest-Human-Brands/mdrive/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Modest-Human-Brands/mdrive" />
+Published under the [MIT](https://github.com/Modest-Human-Brands/mmedia/blob/main/LICENSE) license.
+<br><br>
+<a href="https://github.com/Modest-Human-Brands/mmedia/graphs/contributors">
+<img src="https://contrib.rocks/image?repo=Modest-Human-Brands/mmedia" />
 </a>

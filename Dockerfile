@@ -21,13 +21,6 @@ FROM oven/bun:1-alpine AS runner
 ARG VERSION
 ARG BUILD_TIME
 
-RUN apk add --no-cache \
-  --repository=https://dl-cdn.alpinelinux.org/alpine/edge/main \
-  --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
-  ffmpeg
-
-RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing steghide
-
 WORKDIR /app
 
 COPY --from=iii-installer /root/.local/bin/iii /usr/local/bin/iii
