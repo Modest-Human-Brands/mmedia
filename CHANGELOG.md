@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.5
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.4...v0.1.5)
+
+### 🏡 Chore
+
+- Add .editorconfig and update Dockerfile and env.d.ts for consistency ([14a389e](https://github.com/Modest-Human-Brands/mmedia/commit/14a389e))
+- Update Dockerfile and workflows to use latest action versions; add get-dimension utility ([3a69c1d](https://github.com/Modest-Human-Brands/mmedia/commit/3a69c1d))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.4
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.3...v0.1.4)
