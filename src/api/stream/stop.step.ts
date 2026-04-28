@@ -1,11 +1,13 @@
 import { enqueue, http, logger, type Handlers, type StepConfig } from 'motia'
-import { $fetch } from 'ofetch'
 import { z } from 'zod'
-import { OME_API_HOST, OME_API_AUTH } from './index.step'
+import { RoomServiceClient } from 'livekit-server-sdk'
+
+// Initialize the RoomClient for administrative actions
+const roomClient = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
 export const config = {
   name: 'StreamStop',
-  description: 'Stop a live stream via OME REST API',
+  description: 'Stop a live stream by deleting the LiveKit Room',
   flows: ['stream-flow'],
   triggers: [
     http('POST', '/stream/stop', {
@@ -22,19 +24,39 @@ export const config = {
 
 export const handler: Handlers<typeof config> = async ({ request }) => {
   const { slug, deviceId } = request.body
+  const roomName = `${slug}_${deviceId}`
 
-  if (!slug || !deviceId) return { status: 400, body: { error: 'slug and deviceId required' } }
-
-  const data = await $fetch(`${OME_API_HOST}/vhosts/default/apps/live/streams/${slug}_${deviceId}`, { method: 'DELETE', headers: OME_API_AUTH })
-  const stopped = data !== null
-
-  if (!stopped) {
-    return { status: 404, body: { error: `No active stream found for ${slug}_${deviceId}` } }
+  if (!slug || !deviceId) {
+    return { status: 400, body: { error: 'slug and deviceId required' } }
   }
 
-  logger.info(`Stream stopped: ${slug}_${deviceId}`)
+  try {
+    // 1. Delete the room in LiveKit
+    // This forcibly disconnects all publishers and subscribers
+    await roomClient.deleteRoom(roomName)
 
-  await enqueue({ topic: 'stream.stopped', data: { slug, deviceId } })
+    logger.info(`LiveKit Room deleted: ${roomName}`)
 
-  return { status: 200, body: { stopped: true, slug, deviceId } }
+    // 2. Emit event for downstream processing (e.g., closing DB records)
+    await enqueue({ topic: 'stream.stopped', data: { slug, deviceId } })
+
+    return {
+      status: 200,
+      body: { stopped: true, slug, deviceId },
+    }
+  } catch (error: any) {
+    // LiveKit throws an error if the room is not found
+    if (error?.message?.includes('not found')) {
+      return {
+        status: 404,
+        body: { error: `No active room found for ${roomName}` },
+      }
+    }
+
+    logger.error(`Failed to stop LiveKit room ${roomName}:`, error)
+    return {
+      status: 400,
+      body: { error: 'Internal server error while stopping stream' },
+    }
+  }
 }

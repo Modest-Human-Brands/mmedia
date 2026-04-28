@@ -1,33 +1,31 @@
 import { execa } from 'execa'
 import path from 'node:path'
 
-interface ResolutionVariant {
-  height: number
-  videoBitrate: string // Base bitrate for this resolution
-}
-
-interface AudioVariant {
-  bitrate: string
-  channels: number
+/**
+ * Enhanced capability check to ensure hardware can actually OPEN the encoder,
+ * not just that the binary has it compiled.
+ */
+async function checkHardwareSupport(encoder: string): Promise<boolean> {
+  try {
+    // We run a 1-frame null test to see if the hardware session actually initializes
+    await execa('ffmpeg', ['-f', 'lavfi', '-i', 'color=c=black:s=64x64', '-frames:v', '1', '-c:v', encoder, '-f', 'null', '-'])
+    return true
+  } catch {
+    return false
+  }
 }
 
 const SEGMENT_DURATION = 4
 const FPS = 30
 const GOP_SIZE = FPS * SEGMENT_DURATION
 
-const CODECS = [
-  { name: 'av1', ffmpegCodec: 'libsvtav1', ext: 'av1' },
-  { name: 'hevc', ffmpegCodec: 'libx265', ext: 'hevc' },
-  { name: 'vp9', ffmpegCodec: 'libvpx-vp9', ext: 'vp9' },
-  { name: 'avc', ffmpegCodec: 'libx264', ext: 'avc' },
-]
-
-const VIDEO_VARIANTS: ResolutionVariant[] = [
+const VIDEO_VARIANTS = [
   { height: 1920, videoBitrate: '3500k' },
   { height: 1080, videoBitrate: '2000k' },
   { height: 720, videoBitrate: '1200k' },
 ]
-const AUDIO_VARIANTS: AudioVariant[] = [
+
+const AUDIO_VARIANTS = [
   { bitrate: '192k', channels: 2 },
   { bitrate: '128k', channels: 2 },
 ]
@@ -38,20 +36,35 @@ export default async function (filePath: string, outputDir: string) {
   const absoluteFilePath = path.resolve(filePath)
   const outputName = path.basename(filePath.split('_').at(-1)!, path.extname(filePath))
 
-  const ffmpegArgs: string[] = ['-y', '-i', absoluteFilePath]
+  // 1. Identify which hardware encoders are ACTUALLY functional on this machine
+  const candidates = ['h264_nvenc', 'hevc_nvenc', 'av1_nvenc', 'h264_qsv', 'hevc_qsv', 'av1_qsv']
+  const functionalHw = new Set<string>()
+
+  for (const c of candidates) {
+    if (await checkHardwareSupport(c)) functionalHw.add(c)
+  }
+
+  const CODECS = [
+    { name: 'av1', sw: 'libsvtav1', hw: ['av1_nvenc', 'av1_qsv'] },
+    { name: 'hevc', sw: 'libx265', hw: ['hevc_nvenc', 'hevc_qsv'] },
+    { name: 'vp9', sw: 'libvpx-vp9', hw: ['vp9_qsv'] },
+    { name: 'avc', sw: 'libx264', hw: ['h264_nvenc', 'h264_qsv'] },
+  ]
+
+  const ffmpegArgs: string[] = ['-y']
+
+  // Use auto hardware accel for decoding if any HW encoders were found
+  if (functionalHw.size > 0) ffmpegArgs.push('-hwaccel', 'auto')
+
+  ffmpegArgs.push('-i', absoluteFilePath)
 
   const filterComplex: string[] = []
-
   for (const variant of VIDEO_VARIANTS) {
     const scaleOutLabel = `vscale_${variant.height}`
-
-    const scaleFilter = `[0:v]scale=trunc(oh*a/2)*2:${variant.height}:flags=lanczos,fps=${FPS}[${scaleOutLabel}]`
-    filterComplex.push(scaleFilter)
-
+    filterComplex.push(`[0:v]scale=trunc(oh*a/2)*2:${variant.height}:flags=lanczos,fps=${FPS}[${scaleOutLabel}]`)
     const splitOutputs = CODECS.map((c) => `[v${variant.height}_${c.name}]`).join('')
     filterComplex.push(`[${scaleOutLabel}]split=${CODECS.length}${splitOutputs}`)
   }
-
   ffmpegArgs.push('-filter_complex', filterComplex.join(';'))
 
   let outputStreamIndex = 0
@@ -61,73 +74,62 @@ export default async function (filePath: string, outputDir: string) {
       const currentIdx = outputStreamIndex
       const inputLabel = `[v${variant.height}_${codec.name}]`
 
-      ffmpegArgs.push('-map', inputLabel)
+      const encoder = codec.hw.find((h) => functionalHw.has(h)) || codec.sw
+      const isNvenc = encoder.includes('nvenc')
+      const isQsv = encoder.includes('qsv')
 
-      ffmpegArgs.push(
-        `-c:v:${currentIdx}`,
-        codec.ffmpegCodec,
-        `-g:v:${currentIdx}`,
-        `${GOP_SIZE}`,
-        `-keyint_min:v:${currentIdx}`,
-        `${GOP_SIZE}`,
-        `-sc_threshold:v:${currentIdx}`,
-        '0',
-        `-flags:v:${currentIdx}`,
-        '+cgop'
-      )
+      ffmpegArgs.push('-map', inputLabel, `-c:v:${currentIdx}`, encoder)
 
-      if (codec.name === 'av1') {
-        ffmpegArgs.push(`-crf:v:${currentIdx}`, '35', `-preset:v:${currentIdx}`, '8', `-svtav1-params:v:${currentIdx}`, `tune=0:enable-overlays=1:scm=0`)
+      // Align GOP for DASH (Keyframe every 4 seconds)
+      ffmpegArgs.push(`-g:v:${currentIdx}`, `${GOP_SIZE}`, `-keyint_min:v:${currentIdx}`, `${GOP_SIZE}`)
+
+      if (isNvenc) {
+        ffmpegArgs.push(
+          `-rc:v:${currentIdx}`,
+          'vbr',
+          `-cq:v:${currentIdx}`,
+          codec.name === 'avc' ? '23' : '28',
+          `-preset:v:${currentIdx}`,
+          'p4',
+          `-profile:v:${currentIdx}`,
+          codec.name === 'av1' || codec.name === 'hevc' ? 'main' : 'high'
+        )
+      } else if (isQsv) {
+        // Intel QSV specific bitrate control
+        ffmpegArgs.push(`-global_quality:v:${currentIdx}`, '25', `-preset:v:${currentIdx}`, 'medium')
       } else {
-        const bufSize = `${Number.parseInt(variant.videoBitrate) * 2}k`
-        ffmpegArgs.push(`-b:v:${currentIdx}`, variant.videoBitrate, `-maxrate:v:${currentIdx}`, variant.videoBitrate, `-bufsize:v:${currentIdx}`, bufSize)
-
-        switch (codec.name) {
-          case 'avc': {
-            ffmpegArgs.push(`-profile:v:${currentIdx}`, 'high', `-preset:v:${currentIdx}`, 'medium')
-
-            break
-          }
-          case 'hevc': {
-            ffmpegArgs.push(`-tag:v:${currentIdx}`, 'hvc1', `-preset:v:${currentIdx}`, 'medium')
-
-            break
-          }
-          case 'vp9': {
-            ffmpegArgs.push(`-row-mt:v:${currentIdx}`, '1', `-deadline:v:${currentIdx}`, 'good', `-cpu-used:v:${currentIdx}`, '2')
-
-            break
-          }
+        // Software Fallback
+        ffmpegArgs.push(`-sc_threshold:v:${currentIdx}`, '0')
+        if (codec.name === 'av1') {
+          ffmpegArgs.push(`-crf:v:${currentIdx}`, '35', `-preset:v:${currentIdx}`, '8')
+        } else {
+          ffmpegArgs.push(`-b:v:${currentIdx}`, variant.videoBitrate, `-maxrate:v:${currentIdx}`, variant.videoBitrate, `-bufsize:v:${currentIdx}`, `${Number.parseInt(variant.videoBitrate) * 2}k`)
+          if (codec.name === 'avc') ffmpegArgs.push(`-profile:v:${currentIdx}`, 'high', `-preset:v:${currentIdx}`, 'medium')
+          if (codec.name === 'hevc') ffmpegArgs.push(`-tag:v:${currentIdx}`, 'hvc1', `-preset:v:${currentIdx}`, 'medium')
+          if (codec.name === 'vp9') ffmpegArgs.push(`-deadline:v:${currentIdx}`, 'good', `-cpu-used:v:${currentIdx}`, '2')
         }
       }
-
       outputStreamIndex++
     }
   }
 
+  // Audio streams
   for (const audioVar of AUDIO_VARIANTS) {
     const currentIdx = outputStreamIndex
     ffmpegArgs.push('-map', '0:a:0', `-c:a:${currentIdx}`, 'aac', `-b:a:${currentIdx}`, audioVar.bitrate, `-ac:a:${currentIdx}`, `${audioVar.channels}`, `-ar:a:${currentIdx}`, '48000')
     outputStreamIndex++
   }
 
+  // Adaptation Sets
   const adaptationSets: string[] = []
-
-  for (const [codecIndex, _codec] of CODECS.entries()) {
-    const streamIndices: number[] = []
-    for (const [resIndex, _] of VIDEO_VARIANTS.entries()) {
-      const streamId = codecIndex + resIndex * CODECS.length
-      streamIndices.push(streamId)
-    }
-
-    adaptationSets.push(`id=${codecIndex},streams=${streamIndices.join(',')}`)
+  for (let i = 0; i < CODECS.length; i++) {
+    const streams = VIDEO_VARIANTS.map((_, resIdx) => i + resIdx * CODECS.length)
+    adaptationSets.push(`id=${i},streams=${streams.join(',')}`)
   }
-
-  const audioIndices = AUDIO_VARIANTS.map((_, i) => 12 + i).join(',')
-  adaptationSets.push(`id=${CODECS.length},streams=${audioIndices}`)
+  const audioIndices = AUDIO_VARIANTS.map((_, i) => VIDEO_VARIANTS.length * CODECS.length + i)
+  adaptationSets.push(`id=${CODECS.length},streams=${audioIndices.join(',')}`)
 
   const mpdFileName = `${outputName}.mpd`
-
   ffmpegArgs.push(
     '-f',
     'dash',
@@ -148,14 +150,9 @@ export default async function (filePath: string, outputDir: string) {
 
   try {
     await execa('ffmpeg', ffmpegArgs, { cwd: outputDir })
-
-    return {
-      success: true,
-      mpdFile: path.join(outputDir, mpdFileName),
-      outputDir: outputDir,
-    }
-  } catch (error: unknown) {
-    console.error('❌ FFmpeg failed:', error)
+    return { success: true, mpdFile: path.join(outputDir, mpdFileName) }
+  } catch (error) {
+    console.error('❌ FFmpeg fatal error:', error)
     throw error
   }
 }

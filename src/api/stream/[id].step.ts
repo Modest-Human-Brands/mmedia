@@ -1,31 +1,33 @@
 import { http, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
-import resolveStreamStatus from 'src/utils/resolve-stream-status'
-import { getSrtUrl, getHlsUrl } from './start.step'
+import { RoomServiceClient } from 'livekit-server-sdk'
+import { getHlsUrl } from './start.step'
+
+const roomService = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
 export enum StreamStatus {
-  Idle = 'idle', // registered, nothing started
-  Starting = 'starting', // FFmpeg spawning, waiting for SRT connection
-  Live = 'live', // SRT connected, actively encoding
-  Paused = 'paused', // stream paused, FFmpeg still running
-  Stopping = 'stopping', // SIGTERM sent, flushing buffers
-  Stopped = 'stopped', // FFmpeg exited cleanly (code 0)
-  Error = 'error', // FFmpeg exited with non-zero code
-  Processing = 'processing', // post-stream: remux / R2 upload in progress
-  Ready = 'ready', // processing done, VOD available
+  Idle = 'idle',
+  Starting = 'starting',
+  Live = 'live',
+  Paused = 'paused',
+  Stopping = 'stopping',
+  Stopped = 'stopped',
+  Error = 'error',
+  Processing = 'processing',
+  Ready = 'ready',
 }
 
 export const streamSchema = z.object({
   slug: z.string(),
   deviceId: z.string(),
-  status: z.enum(StreamStatus),
+  status: z.enum(StreamStatus as any),
   streamUrl: z.string(),
   media: z.string(),
 })
 
 export const config = {
   name: 'StreamStatus',
-  description: 'Get a single HLS stream by slug and deviceId',
+  description: 'Get a single LiveKit room status by slug and deviceId',
   flows: ['stream-flow'],
   triggers: [
     http('GET', '/stream/:slug/:deviceId', {
@@ -40,22 +42,37 @@ export const config = {
 
 export const handler: Handlers<typeof config> = async ({ request }) => {
   const { slug, deviceId } = request.pathParams
+  const roomName = `${slug}_${deviceId}`
 
-  if (!slug || !deviceId) {
-    return { status: 404, body: { error: 'slug and deviceId are required' } }
-  }
+  try {
+    const rooms = await roomService.listRooms([roomName])
+    const room = rooms.find((r) => r.name === roomName)
 
-  const status = await resolveStreamStatus(slug, deviceId)
+    let status = StreamStatus.Idle
 
-  logger.info(`Stream ${slug}_${deviceId} → ${status}`)
+    if (room) {
+      if (room.numParticipants > 0) {
+        status = StreamStatus.Live
+      } else {
+        status = StreamStatus.Starting
+      }
+    } else {
+      status = StreamStatus.Stopped
+    }
 
-  return {
-    status: 200,
-    body: {
-      slug: `${slug}_${deviceId}`,
-      status,
-      streamUrl: getSrtUrl(slug, deviceId),
-      media: getHlsUrl(slug, deviceId),
-    },
+    logger.info(`LiveKit Room ${roomName} → ${status}`)
+
+    return {
+      status: 200,
+      body: {
+        slug: roomName,
+        status,
+        streamUrl: '', //getSrtUrl(slug, deviceId),
+        media: getHlsUrl(slug, deviceId),
+      },
+    }
+  } catch (error_) {
+    logger.error(`Failed to fetch room status: ${error_}`)
+    return { status: 404, body: { error: 'Stream not found or service unavailable' } }
   }
 }

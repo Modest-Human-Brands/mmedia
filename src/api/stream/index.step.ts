@@ -1,11 +1,13 @@
 import { http, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 import { streamSchema, StreamStatus } from './[id].step'
-import { $fetch } from 'ofetch'
-import { getSrtUrl, getHlsUrl } from './start.step'
+import { RoomServiceClient } from 'livekit-server-sdk'
 
-export const OME_API_HOST = `${import.meta.env.MOTIA_OME_API_PROTOCOL}://${import.meta.env.MOTIA_OME_HOST}:${import.meta.env.MOTIA_OME_API_PORT}/v1`
-export const OME_API_AUTH = { Authorization: `Basic ${btoa(import.meta.env.MOTIA_OME_API_KEY as string)}` }
+const LIVEKIT_HOST = `https://${import.meta.env.MOTIA_LIVEKIT_URL}`
+const API_KEY = import.meta.env.MOTIA_LIVEKIT_API_KEY
+const API_SECRET = import.meta.env.MOTIA_LIVEKIT_API_SECRET
+
+const roomService = new RoomServiceClient(LIVEKIT_HOST, API_KEY, API_SECRET)
 
 export const config = {
   name: 'StreamAllStatus',
@@ -23,23 +25,30 @@ export const config = {
 } as const satisfies StepConfig
 
 export const handler: Handlers<typeof config> = async (_req) => {
-  const streamNames = (await $fetch<{ response: string[] }>(`${OME_API_HOST}/vhosts/default/apps/live/streams`, { headers: OME_API_AUTH })).response
+  const rooms = await roomService.listRooms()
 
   const streams = await Promise.all(
-    streamNames.map(async (name) => {
-      const [slug, deviceId] = name.split('_')
-
-      const { connections } = (await $fetch<{ response: { connections: { srt: number } } }>(`${OME_API_HOST}/stats/current/vhosts/default/apps/live/streams/${name}`, { headers: OME_API_AUTH }))
-        .response
+    rooms.map(async (room) => {
+      const [slug, deviceId] = room.name.split('_')
 
       let status = StreamStatus.Idle
-      status = connections.srt >= 0 ? StreamStatus.Live : StreamStatus.Starting
+      if (room.numParticipants > 0) {
+        status = StreamStatus.Live
+      } else if (room.creationTime > 0) {
+        status = StreamStatus.Starting
+      }
 
-      return { slug, deviceId, status, streamUrl: getSrtUrl(slug, deviceId), media: getHlsUrl(slug, deviceId) }
+      return {
+        slug,
+        deviceId,
+        status,
+        streamUrl: room.name,
+        media: `https://${LIVEKIT_HOST}/rooms/${room.name}`,
+      }
     })
   )
 
-  logger.info(`Active streams: ${streams.map((s) => `${s.slug} - ${s.status}`).join(', ')}`)
+  logger.info(`Active LiveKit Rooms: ${streams.map((s) => `${s.slug} - ${s.status}`).join(', ')}`)
 
   return { status: 200, body: streams }
 }

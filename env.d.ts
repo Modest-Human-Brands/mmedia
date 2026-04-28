@@ -8,12 +8,15 @@ interface ImportMetaEnv {
   readonly MOTIA_DRIVE_R2_ENDPOINT: string
   readonly MOTIA_DRIVE_R2_BUCKET: string
 
-  readonly MOTIA_OME_HOST: string
-  readonly MOTIA_OME_API_PROTOCOL: string
-  readonly MOTIA_OME_API_PORT: string
-  readonly MOTIA_OME_SRT_PORT: string
-  readonly MOTIA_OME_HLS_PORT: string
-  readonly MOTIA_OME_API_KEY: string
+  readonly MOTIA_CDN_HOST: string
+  readonly MOTIA_LIVEKIT_URL: string
+  readonly MOTIA_LIVEKIT_API_KEY: string
+  readonly MOTIA_LIVEKIT_API_SECRET: string
+
+  readonly MOTIA_CDN_R2_BUCKET: string
+  readonly MOTIA_CDN_R2_REGION: string
+  readonly MOTIA_CDN_R2_ACCESS_KEY_ID: string
+  readonly MOTIA_CDN_R2_SECRET_ACCESS_KEY: string
 }
 
 interface ImportMeta {
