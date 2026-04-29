@@ -12,7 +12,7 @@ RUN bun run build
 
 FROM debian:bookworm-slim AS iii-installer
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates jq && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://install.iii.dev/iii/main/install.sh | bash
 

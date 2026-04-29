@@ -1,28 +1,13 @@
-modules:
-  - class: modules::stream::StreamModule
+workers:
+  - name: iii-stream
     config:
-      port: ${STREAMS_PORT:3112}
+      port: 3112
       host: 127.0.0.1
-      adapter:
-        class: modules::stream::adapters::KvStore
-        config:
-          store_method: file_based
-          file_path: ./data/streams_store
 
-  - class: modules::state::StateModule
+  - name: iii-http
     config:
-      adapter:
-        class: modules::state::adapters::KvStore
-        config:
-          store_method: file_based
-          file_path: ./data/state_store.db
-
-  - class: modules::api::RestApiModule
-    config:
-      port: 3111
+      port: 3000
       host: 127.0.0.1
-      default_timeout: 30000
-      concurrency_request_limit: 1024
       cors:
         allowed_origins:
           - '*'
@@ -30,45 +15,29 @@ modules:
           - GET
           - POST
           - PUT
+          - PATCH
           - DELETE
           - OPTIONS
 
-  - class: modules::observability::OtelModule
-    config:
-      enabled: ${OTEL_ENABLED:true}
-      service_name: ${OTEL_SERVICE_NAME:iii-engine}
-      service_version: ${SERVICE_VERSION:0.2.0}
-      service_namespace: ${SERVICE_NAMESPACE:production}
-      exporter: ${OTEL_EXPORTER_TYPE:memory}
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
-      sampling_ratio: 1.0
-      memory_max_spans: ${OTEL_MEMORY_MAX_SPANS:10000}
-      metrics_enabled: true
-      metrics_exporter: ${OTEL_METRICS_EXPORTER:memory}
-      metrics_retention_seconds: 3600
-      metrics_max_count: 10000
-      logs_enabled: ${OTEL_LOGS_ENABLED:true}
-      logs_exporter: ${OTEL_LOGS_EXPORTER:memory}
-      logs_max_count: ${OTEL_LOGS_MAX_COUNT:1000}
-      logs_retention_seconds: ${OTEL_LOGS_RETENTION_SECONDS:3600}
-      logs_sampling_ratio: ${OTEL_LOGS_SAMPLING_RATIO:1.0}
-
-  - class: modules::queue::QueueModule
+  - name: iii-state
     config:
       adapter:
-        class: modules::queue::BuiltinQueueAdapter
+        name: kv
 
-  - class: modules::pubsub::PubSubModule
+  - name: iii-queue
+    config:
+      queue_configs:
+        default:
+          max_retries: 5
+          concurrency: 10
+          type: standard
+
+  - name: iii-cron
     config:
       adapter:
-        class: modules::pubsub::LocalAdapter
+        name: kv
 
-  - class: modules::cron::CronModule
-    config:
-      adapter:
-        class: modules::cron::KvCronAdapter
-
-  - class: modules::shell::ExecModule
+  - name: iii-exec
     config:
       watch:
         - src/**/*.ts
