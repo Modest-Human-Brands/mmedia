@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.7
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.6...v0.1.7)
+
+### 🩹 Fixes
+
+- Add jq installation to Dockerfile for iii-installer ([71d9dd7](https://github.com/Modest-Human-Brands/mmedia/commit/71d9dd7))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.6
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.5...v0.1.6)
