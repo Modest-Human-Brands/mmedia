@@ -1,10 +1,9 @@
-import r2Cdn from './r2-cdn'
-import r2Drive from './r2-drive'
+import type { AwsClient } from 'aws4fetch'
 
-export default async function (objectKey: string, objectOrigin: 'cache' | 'origin' = 'cache', endpoint = process.env.NUXT_PRIVATE_R2_ENDPOINT!, bucket = process.env.NUXT_PRIVATE_R2_BUCKET!) {
+export default async function (client: AwsClient, objectKey: string, endpoint = process.env.MOTIA_CDN_R2_ENDPOINT!, bucket = process.env.MOTIA_CDN_R2_BUCKET!) {
   const url = `${endpoint}/${bucket}/${objectKey}`
 
-  const res = await (objectOrigin === 'cache' ? r2Cdn : r2Drive).fetch(url, { method: 'GET' })
+  const res = await client.fetch(url, { method: 'GET' })
   if (!(res.ok && res.body)) {
     throw new Error(JSON.stringify({ statusCode: res.status, message: res.statusText }))
   }

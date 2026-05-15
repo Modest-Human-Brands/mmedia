@@ -2,7 +2,6 @@ import { enqueue, http, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 import { RoomServiceClient } from 'livekit-server-sdk'
 
-// Initialize the RoomClient for administrative actions
 const roomClient = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
 export const config = {

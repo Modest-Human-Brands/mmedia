@@ -1,5 +1,5 @@
+import type { AwsClient } from 'aws4fetch'
 import mimeTypes from 'mime-types'
-import r2Cdn from './r2-cdn'
 
 interface R2PutOptions {
   endpoint: string
@@ -7,17 +7,17 @@ interface R2PutOptions {
 }
 
 const defaultOptions: R2PutOptions = {
-  endpoint: import.meta.env.NUXT_PRIVATE_R2_ENDPOINT!,
-  bucket: import.meta.env.NUXT_PRIVATE_R2_BUCKET!,
+  endpoint: process.env.MOTIA_CDN_R2_ENDPOINT!,
+  bucket: process.env.MOTIA_CDN_R2_BUCKET!,
 }
 
-export default async function (objectKey: string, webStream: ReadableStream, byteLength: number, { endpoint, bucket }: R2PutOptions = defaultOptions) {
+export default async function (client: AwsClient, objectKey: string, webStream: ReadableStream, byteLength: number, { endpoint, bucket }: R2PutOptions = defaultOptions) {
   const url = `${endpoint}/${bucket}/${objectKey}`
 
   let res: Response
   const contentType = mimeTypes.contentType(mimeTypes.lookup(objectKey) || 'application/octet-stream') || 'application/octet-stream'
   try {
-    res = await r2Cdn.fetch(url, {
+    res = await client.fetch(url, {
       method: 'PUT',
       headers: {
         'Content-Type': contentType,

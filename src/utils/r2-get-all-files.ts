@@ -9,7 +9,6 @@ function xmlUnescape(s: string) {
     .replace(/&#39;/g, "'")
 }
 
-// Parse minimal fields from ListObjects XML
 function parseList(xml: string) {
   const keys: string[] = []
   const keyRegex = /<Key>([^<]+)<\/Key>/g
@@ -22,7 +21,7 @@ function parseList(xml: string) {
   return { keys, isTruncated, nextContinuationToken }
 }
 
-export default async function (r2: AwsClient, cfg: { endpoint: string; bucket: string }, opts: { prefix?: string; maxKeys?: number } = {}): Promise<string[]> {
+export default async function (client: AwsClient, cfg: { endpoint: string; bucket: string }, opts: { prefix?: string; maxKeys?: number } = {}): Promise<string[]> {
   const all: string[] = []
   const maxKeys = Math.min(Math.max(opts.maxKeys || 1000, 1), 1000)
   let continuationToken: string | undefined
@@ -35,7 +34,7 @@ export default async function (r2: AwsClient, cfg: { endpoint: string; bucket: s
     if (opts.prefix) url.searchParams.set('prefix', opts.prefix)
     if (continuationToken) url.searchParams.set('continuation-token', continuationToken)
 
-    const res = await r2.fetch(url.toString(), { method: 'GET' })
+    const res = await client.fetch(url.toString(), { method: 'GET' })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`ListObjects failed: ${res.status} ${res.statusText} ${body}`)

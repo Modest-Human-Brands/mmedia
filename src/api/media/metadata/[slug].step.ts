@@ -20,7 +20,7 @@ export const config = {
   description: 'Get a single media item by slug',
   flows: ['media-get-flow'],
   triggers: [
-    http('GET', '/media/:slug', {
+    http('GET', '/media/metadata/:slug', {
       responseSchema: {
         200: mediaSchema,
         404: z.object({ error: z.string() }),

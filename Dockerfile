@@ -14,7 +14,7 @@ FROM debian:bookworm-slim AS iii-installer
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates jq && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://install.iii.dev/iii/main/install.sh | bash
+RUN curl -fsSL https://install.iii.dev/iii/main/install.sh | VERSION=0.10.0 bash
 
 FROM oven/bun:1-alpine AS runner
 

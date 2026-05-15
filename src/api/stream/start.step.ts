@@ -15,14 +15,14 @@ import {
 import { AwsClient } from 'aws4fetch'
 import { StreamStatus } from './[id].step'
 
-const livekitUrl = import.meta.env.MOTIA_LIVEKIT_URL
-const apiKey = import.meta.env.MOTIA_LIVEKIT_API_KEY
-const apiSecret = import.meta.env.MOTIA_LIVEKIT_API_SECRET
+const livekitUrl = process.env.MOTIA_LIVEKIT_URL
+const apiKey = process.env.MOTIA_LIVEKIT_API_KEY
+const apiSecret = process.env.MOTIA_LIVEKIT_API_SECRET
 
-const r2Bucket = import.meta.env.MOTIA_CDN_R2_BUCKET
-const r2Region = import.meta.env.MOTIA_CDN_R2_REGION
-const r2AccessKey = import.meta.env.MOTIA_CDN_R2_ACCESS_KEY_ID
-const r2Secret = import.meta.env.MOTIA_CDN_R2_SECRET_ACCESS_KEY
+const r2Bucket = process.env.MOTIA_CDN_R2_BUCKET
+const r2Region = process.env.MOTIA_CDN_R2_REGION
+const r2AccessKey = process.env.MOTIA_CDN_R2_ACCESS_KEY_ID
+const r2Secret = process.env.MOTIA_CDN_R2_SECRET_ACCESS_KEY
 
 const ingressClient = new IngressClient(livekitUrl, apiKey, apiSecret)
 const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
@@ -43,13 +43,13 @@ function makeS3Upload(): S3Upload {
     bucket: r2Bucket,
     region: r2Region,
     // Uncomment if using R2 / MinIO:
-    // endpoint: import.meta.env.MOTIA_S3_ENDPOINT,
+    // endpoint: process.env.MOTIA_S3_ENDPOINT,
     // forcePathStyle: true,
   })
 }
 
 export function getHlsUrl(slug: string): string {
-  const cdnBase = import.meta.env.MOTIA_CDN_HOST
+  const cdnBase = process.env.MOTIA_CDN_HOST
   return `${cdnBase}/live/${slug}/hls/master.m3u8`
 }
 
@@ -146,7 +146,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     })
 
     // ── 4. Upload master.m3u8 to S3 via aws4fetch ─────────────────────────────
-    const cdnBase = import.meta.env.MOTIA_CDN_HOST
+    const cdnBase = process.env.MOTIA_CDN_HOST
     const masterPlaylist = [
       '#EXTM3U',
       '#EXT-X-VERSION:3',

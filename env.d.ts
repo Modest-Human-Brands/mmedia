@@ -17,6 +17,8 @@ interface ImportMetaEnv {
   readonly MOTIA_CDN_R2_REGION: string
   readonly MOTIA_CDN_R2_ACCESS_KEY_ID: string
   readonly MOTIA_CDN_R2_SECRET_ACCESS_KEY: string
+
+  readonly MOTIA_DRIVE_URL: string
 }
 
 interface ImportMeta {

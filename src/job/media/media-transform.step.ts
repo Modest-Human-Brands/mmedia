@@ -11,10 +11,12 @@ import transcodeVideo from 'src/utils/transcode-video'
 import ensureDir from 'src/utils/ensure-dir'
 import generateThumbnail from 'src/utils/generate-thumbnail'
 import r2GetFileStream from 'src/utils/r2-get-file-stream'
+import r2Drive from 'src/utils/r2-drive'
 
-/**
- * Motia Step Configuration
- */
+const fs = createStorage({
+  driver: fsDriver({ base: './static' }),
+})
+
 export const config = {
   name: 'MediaTransformer',
   description: 'Image and video transcoding',
@@ -34,31 +36,23 @@ export const config = {
   ],
 } as const satisfies StepConfig
 
-const fs = createStorage({
-  driver: fsDriver({ base: './static' }),
-})
-
-/**
- * Step Handler
- */
-export const handler: Handlers<typeof config> = async ({ taskType, payload }, { traceId }) => {
+export const handler: Handlers<typeof config> = async (input, { traceId }) => {
+  const { taskType, payload } = input as { taskType: string; payload: { cacheKey: string; mediaOriginId: string; modifiers: Record<string, string> } }
   const { cacheKey, mediaOriginId, modifiers } = payload
 
   logger.debug(`[MediaTransformer] Starting task: ${taskType}`, { mediaOriginId, cacheKey })
 
-  // 1. Prepare Paths and Source
   const mediaId = encodeURI(mediaOriginId).replaceAll('/', '_')
   const sourcePath = `./static/source/${mediaId}`
   const storageSourceKey = `source/${mediaId}`
 
   await ensureDir('./static/source')
 
-  // 2. Ensure Source File Exists (Shared Logic)
   try {
     if (!(await fs.hasItem(storageSourceKey))) {
       logger.info(`[MediaTransformer] Downloading source from R2: ${mediaOriginId}`)
 
-      const { stream } = await r2GetFileStream(encodeURI(mediaOriginId), 'origin', import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
+      const { stream } = await r2GetFileStream(r2Drive, encodeURI(mediaOriginId), import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
 
       // Stream R2 content directly to local disk
       await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
