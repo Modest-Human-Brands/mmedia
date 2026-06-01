@@ -6,7 +6,7 @@ export const config = {
   description: 'Consolidated step for image and video transcoding',
   flows: ['media-transform-flow'],
   triggers: [
-    http('POST', '/media', {
+    http('POST', '/media/transform', {
       bodySchema: z.object({
         taskType: z.enum(['transform:image', 'transform:video']),
         payload: z.object({
