@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.8
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.7...v0.1.8)
+
+### 💅 Refactors
+
+- Implement new media metadata handling; replace deprecated methods ([b7f0a09](https://github.com/Modest-Human-Brands/mmedia/commit/b7f0a09))
+
+### 🏡 Chore
+
+- Update dependencies and improve media metadata handling ([8b5d22e](https://github.com/Modest-Human-Brands/mmedia/commit/8b5d22e))
+- Update dependencies and devDependencies in package.json ([3c17200](https://github.com/Modest-Human-Brands/mmedia/commit/3c17200))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.7
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.6...v0.1.7)
