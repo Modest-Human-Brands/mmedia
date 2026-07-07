@@ -173,7 +173,7 @@
 {
   "ingressId": "ing_9981az",
   "rtmpUrl": "rtmp://ingress.livekit.modesthumanbrands.com/live",
-  "streamKey": "...",
+  "streamKey": "",
   "roomName": "live-shoot-garment"
 }
 ```
