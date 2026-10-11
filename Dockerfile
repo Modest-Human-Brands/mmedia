@@ -1,4 +1,4 @@
-FROM oven/bun:1-alpine AS builder
+FROM oven/bun:1-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS builder
 
 WORKDIR /app
 
@@ -10,13 +10,13 @@ COPY . .
 
 RUN bun run build
 
-FROM debian:bookworm-slim AS iii-installer
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS iii-installer
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates jq && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://install.iii.dev/iii/main/install.sh | VERSION=0.10.0 bash
 
-FROM oven/bun:1-alpine AS runner
+FROM oven/bun:1-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS runner
 
 ARG VERSION
 ARG BUILD_TIME
