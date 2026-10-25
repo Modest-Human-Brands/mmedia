@@ -1,0 +1,20 @@
+$kind: http-request
+description: All LiveKit rooms named slug_deviceId.
+url: '{{base_url}}/stream'
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      pm.test("Body is an array of streams", function () {
+          const body = pm.response.json();
+          pm.expect(body).to.be.an("array");
+          body.forEach(function (s) {
+              pm.expect(s).to.have.all.keys("slug", "deviceId", "status", "streamUrl", "media");
+          });
+      });
+    language: text/javascript
+order: 3000

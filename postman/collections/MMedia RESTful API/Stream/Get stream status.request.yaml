@@ -1,0 +1,20 @@
+$kind: http-request
+description: Status of the room slug_deviceId.
+url: '{{base_url}}/stream/{{slug}}/{{device_id}}'
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      pm.test("Body echoes slug and deviceId with a valid status", function () {
+          const body = pm.response.json();
+          pm.expect(body.slug).to.eql(pm.variables.get("slug"));
+          pm.expect(body.deviceId).to.eql(pm.variables.get("device_id"));
+          pm.expect(body.status).to.be.oneOf(["idle", "starting", "live", "stopped"]);
+          pm.expect(body.media).to.be.a("string");
+      });
+    language: text/javascript
+order: 2000

@@ -1,0 +1,29 @@
+$kind: http-request
+description: Creates a WHIP ingress and starts HLS and MP4 egress for room slug_deviceId.
+url: '{{base_url}}/stream/start'
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "slug": "{{slug}}",
+      "deviceId": "{{device_id}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      pm.test("Body has ingress details and HLS url", function () {
+          const body = pm.response.json();
+          pm.expect(body.status).to.eql("starting");
+          pm.expect(body.streamUrl).to.be.a("string").and.not.empty;
+          pm.expect(body.streamKey).to.be.a("string");
+          pm.expect(body.media).to.include("/live/" + pm.variables.get("slug") + "/" + pm.variables.get("device_id") + "/hls/master.m3u8");
+      });
+    language: text/javascript
+order: 1000

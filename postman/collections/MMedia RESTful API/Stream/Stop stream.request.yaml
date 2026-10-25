@@ -1,0 +1,28 @@
+$kind: http-request
+description: Deletes the room slug_deviceId. 404 when no such room exists.
+url: '{{base_url}}/stream/stop'
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "slug": "{{slug}}",
+      "deviceId": "{{device_id}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      pm.test("Body confirms stop", function () {
+          const body = pm.response.json();
+          pm.expect(body.stopped).to.eql(true);
+          pm.expect(body.slug).to.eql(pm.variables.get("slug"));
+          pm.expect(body.deviceId).to.eql(pm.variables.get("device_id"));
+      });
+    language: text/javascript
+order: 4000

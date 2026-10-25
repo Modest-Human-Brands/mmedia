@@ -14,6 +14,8 @@ import {
 } from 'livekit-server-sdk'
 import { AwsClient } from 'aws4fetch'
 import { StreamStatus } from './[id].step'
+import getHlsUrl from 'src/utils/get-hls-url'
+import getRoomName from 'src/utils/get-room-name'
 
 const livekitUrl = process.env.MOTIA_LIVEKIT_URL
 const apiKey = process.env.MOTIA_LIVEKIT_API_KEY
@@ -21,6 +23,7 @@ const apiSecret = process.env.MOTIA_LIVEKIT_API_SECRET
 
 const r2Bucket = process.env.MOTIA_CDN_R2_BUCKET
 const r2Region = process.env.MOTIA_CDN_R2_REGION
+const r2Endpoint = process.env.MOTIA_CDN_R2_ENDPOINT
 const r2AccessKey = process.env.MOTIA_CDN_R2_ACCESS_KEY_ID
 const r2Secret = process.env.MOTIA_CDN_R2_SECRET_ACCESS_KEY
 
@@ -32,7 +35,7 @@ const aws = new AwsClient({
   accessKeyId: r2AccessKey,
   secretAccessKey: r2Secret,
   region: r2Region,
-  service: 'r2',
+  service: 's3',
 })
 
 // Reused across all LiveKit egress outputs
@@ -42,22 +45,16 @@ function makeS3Upload(): S3Upload {
     secret: r2Secret,
     bucket: r2Bucket,
     region: r2Region,
-    // Uncomment if using R2 / MinIO:
-    // endpoint: process.env.MOTIA_S3_ENDPOINT,
-    // forcePathStyle: true,
+    endpoint: r2Endpoint,
+    forcePathStyle: true,
   })
-}
-
-export function getHlsUrl(slug: string): string {
-  const cdnBase = process.env.MOTIA_CDN_HOST
-  return `${cdnBase}/live/${slug}/hls/master.m3u8`
 }
 
 // ─── HLS quality ladder ───────────────────────────────────────────────────────
 const HLS_QUALITIES = [
   {
     label: '480p',
-    advanced: new EncodingOptions({
+    encoding: new EncodingOptions({
       width: 854,
       height: 480,
       framerate: 30,
@@ -69,13 +66,13 @@ const HLS_QUALITIES = [
   },
   {
     label: '720p',
-    preset: EncodingOptionsPreset.H264_720P_30,
+    encoding: EncodingOptionsPreset.H264_720P_30,
     bandwidth: 3_000_000,
     resolution: '1280x720',
   },
   {
     label: '1080p',
-    preset: EncodingOptionsPreset.H264_1080P_30,
+    encoding: EncodingOptionsPreset.H264_1080P_30,
     bandwidth: 4_500_000,
     resolution: '1920x1080',
   },
@@ -99,6 +96,7 @@ export const config = {
           media: z.string(),
         }),
         400: z.object({ error: z.string() }),
+        502: z.object({ error: z.string() }),
       },
     }),
   ],
@@ -112,18 +110,20 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     return { status: 400, body: { error: 'slug and deviceId required' } }
   }
 
+  const roomName = getRoomName(slug, deviceId)
+
   try {
     // ── 1. Create LiveKit Ingress ─────────────────────────────────────────────
     const ingress = await ingressClient.createIngress(IngressInput.WHIP_INPUT, {
-      roomName: slug,
-      participantIdentity: `${slug}_${deviceId}_publisher`,
+      roomName,
+      participantIdentity: `${roomName}_publisher`,
     })
 
     // ── 2. Raw MP4 egress → S3 ───────────────────────────────────────────────
     const sequence = Math.floor(Date.now() / 1000)
-    const rawMp4Key = `recordings/${slug}/raw_${sequence}.mp4`
+    const rawMp4Key = `recordings/${slug}/${deviceId}/raw_${sequence}.mp4`
 
-    const mp4Egress = egressClient.startRoomCompositeEgress(slug, {
+    const mp4Egress = egressClient.startRoomCompositeEgress(roomName, {
       file: new EncodedFileOutput({
         fileType: EncodedFileType.MP4,
         filepath: rawMp4Key,
@@ -131,18 +131,22 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
       }),
     })
 
-    const hlsEgresses = HLS_QUALITIES.map(({ label, bandwidth, resolution, ...encoding }) => {
+    const hlsEgresses = HLS_QUALITIES.map(({ label, encoding }) => {
       const segmentOutput = new SegmentedFileOutput({
         protocol: SegmentedFileProtocol.HLS_PROTOCOL,
-        filenamePrefix: `live/${slug}/hls/${label}/seg`,
+        filenamePrefix: `live/${slug}/${deviceId}/hls/${label}/seg`,
         playlistName: 'index.m3u8',
         livePlaylistName: 'live.m3u8',
         segmentDuration: 4,
         output: { case: 's3', value: makeS3Upload() },
       })
-      return egressClient.startRoomCompositeEgress(slug, {
-        segments: segmentOutput,
-      })
+      return egressClient.startRoomCompositeEgress(
+        roomName,
+        {
+          segments: segmentOutput,
+        },
+        { encodingOptions: encoding }
+      )
     })
 
     // ── 4. Upload master.m3u8 to S3 via aws4fetch ─────────────────────────────
@@ -151,11 +155,11 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
       '#EXTM3U',
       '#EXT-X-VERSION:3',
       '',
-      ...HLS_QUALITIES.map(({ label, bandwidth, resolution }) => `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution}\n${cdnBase}/live/${slug}/hls/${label}/index.m3u8`),
+      ...HLS_QUALITIES.map(({ label, bandwidth, resolution }) => `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution}\n${cdnBase}/live/${slug}/${deviceId}/hls/${label}/index.m3u8`),
     ].join('\n')
 
-    const masterKey = `live/${slug}/hls/master.m3u8`
-    const masterUpload = aws.fetch(`https://${r2Bucket}.r2.${r2Region}.amazonaws.com/${masterKey}`, {
+    const masterKey = `live/${slug}/${deviceId}/hls/master.m3u8`
+    const masterUpload = aws.fetch(`${r2Endpoint}/${r2Bucket}/${masterKey}`, {
       method: 'PUT',
       body: masterPlaylist,
       headers: {
@@ -166,6 +170,9 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
 
     // Fire everything at once
     const [rawResult, ...hlsAndMaster] = await Promise.all([mp4Egress, ...hlsEgresses, masterUpload])
+
+    const masterResponse = hlsAndMaster.at(-1) as Response
+    if (!masterResponse.ok) throw new Error(`master.m3u8 upload failed: ${masterResponse.status} ${masterResponse.statusText}`)
 
     const hlsResults = hlsAndMaster.slice(0, HLS_QUALITIES.length)
 
@@ -183,11 +190,11 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
         status: StreamStatus.Starting,
         streamUrl: ingress.url ?? '',
         streamKey: ingress.streamKey ?? '',
-        media: getHlsUrl(slug),
+        media: getHlsUrl(slug, deviceId),
       },
     }
   } catch (error) {
     logger.error('Failed to start stream with LiveKit:', error)
-    return { status: 400, body: { error: 'Could not initialize stream session' } }
+    return { status: 502, body: { error: 'Could not initialize stream session' } }
   }
 }

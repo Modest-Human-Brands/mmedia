@@ -1,7 +1,8 @@
 import { http, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 import { RoomServiceClient } from 'livekit-server-sdk'
-import { getHlsUrl } from './start.step'
+import getHlsUrl from 'src/utils/get-hls-url'
+import getRoomName from 'src/utils/get-room-name'
 
 const roomService = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
@@ -20,7 +21,7 @@ export enum StreamStatus {
 export const streamSchema = z.object({
   slug: z.string(),
   deviceId: z.string(),
-  status: z.enum(StreamStatus as any),
+  status: z.enum(StreamStatus),
   streamUrl: z.string(),
   media: z.string(),
 })
@@ -33,7 +34,7 @@ export const config = {
     http('GET', '/stream/:slug/:deviceId', {
       responseSchema: {
         200: streamSchema,
-        404: z.object({ error: z.string() }),
+        502: z.object({ error: z.string() }),
       },
     }),
   ],
@@ -42,7 +43,7 @@ export const config = {
 
 export const handler: Handlers<typeof config> = async ({ request }) => {
   const { slug, deviceId } = request.pathParams
-  const roomName = `${slug}_${deviceId}`
+  const roomName = getRoomName(slug, deviceId)
 
   try {
     const rooms = await roomService.listRooms([roomName])
@@ -65,14 +66,15 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     return {
       status: 200,
       body: {
-        slug: roomName,
+        slug,
+        deviceId,
         status,
-        streamUrl: '', //getSrtUrl(slug, deviceId),
+        streamUrl: '',
         media: getHlsUrl(slug, deviceId),
       },
     }
   } catch (error_) {
     logger.error(`Failed to fetch room status: ${error_}`)
-    return { status: 404, body: { error: 'Stream not found or service unavailable' } }
+    return { status: 502, body: { error: 'Stream service unavailable' } }
   }
 }

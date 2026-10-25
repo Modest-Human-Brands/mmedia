@@ -1,6 +1,7 @@
 import { enqueue, http, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 import { RoomServiceClient } from 'livekit-server-sdk'
+import getRoomName from 'src/utils/get-room-name'
 
 const roomClient = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
@@ -15,6 +16,7 @@ export const config = {
         200: z.object({ stopped: z.boolean(), slug: z.string(), deviceId: z.string() }),
         400: z.object({ error: z.string() }),
         404: z.object({ error: z.string() }),
+        502: z.object({ error: z.string() }),
       },
     }),
   ],
@@ -23,11 +25,11 @@ export const config = {
 
 export const handler: Handlers<typeof config> = async ({ request }) => {
   const { slug, deviceId } = request.body
-  const roomName = `${slug}_${deviceId}`
-
   if (!slug || !deviceId) {
     return { status: 400, body: { error: 'slug and deviceId required' } }
   }
+
+  const roomName = getRoomName(slug, deviceId)
 
   try {
     // 1. Delete the room in LiveKit
@@ -54,8 +56,8 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
 
     logger.error(`Failed to stop LiveKit room ${roomName}:`, error)
     return {
-      status: 400,
-      body: { error: 'Internal server error while stopping stream' },
+      status: 502,
+      body: { error: 'Stream service unavailable' },
     }
   }
 }
