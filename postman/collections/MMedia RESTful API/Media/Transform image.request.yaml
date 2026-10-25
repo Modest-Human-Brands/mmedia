@@ -3,6 +3,7 @@ description: Queues an image transform and waits (up to 30s) for the result.
 url: '{{base_url}}/media/transform'
 method: POST
 headers:
+  x-api-key: '{{api_key}}'
   Content-Type: application/json
 body:
   type: json

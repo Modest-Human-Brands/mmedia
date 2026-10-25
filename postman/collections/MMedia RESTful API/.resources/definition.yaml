@@ -4,5 +4,6 @@ variables:
   base_url: ''
   media_id: ''
   org_id: ''
+  api_key: ''
   slug: ''
   device_id: ''

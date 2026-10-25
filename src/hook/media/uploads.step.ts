@@ -1,6 +1,7 @@
 import { http, enqueue, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 import { $fetch } from 'ofetch'
+import requireApiKey from 'src/utils/require-api-key'
 
 export const config = {
   name: 'WebhookHandler',
@@ -9,7 +10,9 @@ export const config = {
   triggers: [
     http('POST', '/webhook/media/uploads', {
       bodySchema: z.object({ Records: z.array(z.object({ s3: z.any() })) }),
+      middleware: [requireApiKey],
       responseSchema: {
+        401: z.object({ error: z.string() }),
         202: z.object({ success: z.boolean(), message: z.string() }),
         400: z.object({ error: z.string() }),
       },

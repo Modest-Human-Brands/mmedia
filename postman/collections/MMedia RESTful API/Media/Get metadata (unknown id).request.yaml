@@ -3,6 +3,7 @@ description: Unknown media id returns 404.
 url: '{{base_url}}/media/does-not-exist/metadata'
 method: GET
 headers:
+  x-api-key: '{{api_key}}'
   x-org-id: '{{org_id}}'
 scripts:
   - type: afterResponse

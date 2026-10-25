@@ -2,6 +2,7 @@ import { enqueue, http, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
 import { RoomServiceClient } from 'livekit-server-sdk'
 import getRoomName from 'src/utils/get-room-name'
+import requireApiKey from 'src/utils/require-api-key'
 
 const roomClient = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
@@ -12,7 +13,9 @@ export const config = {
   triggers: [
     http('POST', '/stream/stop', {
       bodySchema: z.object({ slug: z.string(), deviceId: z.string() }),
+      middleware: [requireApiKey],
       responseSchema: {
+        401: z.object({ error: z.string() }),
         200: z.object({ stopped: z.boolean(), slug: z.string(), deviceId: z.string() }),
         400: z.object({ error: z.string() }),
         404: z.object({ error: z.string() }),

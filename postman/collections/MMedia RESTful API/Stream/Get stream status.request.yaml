@@ -2,6 +2,8 @@ $kind: http-request
 description: Status of the room slug_deviceId.
 url: '{{base_url}}/stream/{{slug}}/{{device_id}}'
 method: GET
+headers:
+  x-api-key: '{{api_key}}'
 scripts:
   - type: afterResponse
     code: |-

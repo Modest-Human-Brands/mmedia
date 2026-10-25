@@ -9,6 +9,7 @@ import getMediaMetadata from 'src/utils/get-media-metadata'
 import r2Drive from 'src/utils/r2-drive'
 import r2GetAllFiles from 'src/utils/r2-get-all-files'
 import r2GetFileStream from 'src/utils/r2-get-file-stream'
+import requireApiKey from 'src/utils/require-api-key'
 
 const THUMBNAIL_SIZE = '400x400'
 
@@ -40,9 +41,11 @@ export const config = {
   flows: ['media-get-flow'],
   triggers: [
     http('GET', '/media/:mediaId/metadata', {
+      middleware: [requireApiKey],
       responseSchema: {
         200: mediaSchema,
         400: z.object({ error: z.string() }),
+        401: z.object({ error: z.string() }),
         404: z.object({ error: z.string() }),
         500: z.object({ error: z.string() }),
       },

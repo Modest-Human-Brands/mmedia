@@ -16,6 +16,7 @@ import { AwsClient } from 'aws4fetch'
 import { StreamStatus } from './[id].step'
 import getHlsUrl from 'src/utils/get-hls-url'
 import getRoomName from 'src/utils/get-room-name'
+import requireApiKey from 'src/utils/require-api-key'
 
 const livekitUrl = process.env.MOTIA_LIVEKIT_URL
 const apiKey = process.env.MOTIA_LIVEKIT_API_KEY
@@ -85,7 +86,9 @@ export const config = {
   triggers: [
     http('POST', '/stream/start', {
       bodySchema: z.object({ slug: z.string(), deviceId: z.string() }),
+      middleware: [requireApiKey],
       responseSchema: {
+        401: z.object({ error: z.string() }),
         200: z.object({
           slug: z.string(),
           deviceId: z.string(),

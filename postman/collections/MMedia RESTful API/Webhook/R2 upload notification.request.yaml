@@ -3,6 +3,7 @@ description: Cloudflare R2 object-created notification. Queues the file for proc
 url: '{{base_url}}/webhook/media/uploads'
 method: POST
 headers:
+  x-api-key: '{{api_key}}'
   Content-Type: application/json
 body:
   type: json

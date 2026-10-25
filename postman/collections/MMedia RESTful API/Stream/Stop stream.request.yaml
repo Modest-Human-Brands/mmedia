@@ -3,6 +3,7 @@ description: Deletes the room slug_deviceId. 404 when no such room exists.
 url: '{{base_url}}/stream/stop'
 method: POST
 headers:
+  x-api-key: '{{api_key}}'
   Content-Type: application/json
 body:
   type: json

@@ -3,6 +3,7 @@ description: Downloads the processed file from R2 and returns its technical meta
 url: '{{base_url}}/media/{{media_id}}/metadata'
 method: GET
 headers:
+  x-api-key: '{{api_key}}'
   x-org-id: '{{org_id}}'
 scripts:
   - type: afterResponse

@@ -2,6 +2,8 @@ $kind: http-request
 description: Missing x-org-id header returns 400.
 url: '{{base_url}}/media/{{media_id}}/metadata'
 method: GET
+headers:
+  x-api-key: '{{api_key}}'
 scripts:
   - type: afterResponse
     code: |-

@@ -2,6 +2,8 @@ $kind: http-request
 description: All LiveKit rooms named slug_deviceId.
 url: '{{base_url}}/stream'
 method: GET
+headers:
+  x-api-key: '{{api_key}}'
 scripts:
   - type: afterResponse
     code: |-

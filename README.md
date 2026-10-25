@@ -159,6 +159,8 @@ docker run -d \
 
 The REST API runs on port `3111` by default (configurable via `iii-config.yaml`).
 
+**Authentication:** every endpoint except `GET /health` requires an `x-api-key` header matching `MOTIA_API_KEY`. Missing or wrong keys return `401 {"error": "Unauthorized"}`. If `MOTIA_API_KEY` is not set, all protected endpoints return 401.
+
 | Method | Endpoint                   | Handler Step       | Description                                                          |
 | ------ | -------------------------- | ------------------ | -------------------------------------------------------------------- |
 | `GET`  | `/health`                  | `HealthCheck`      | Health and node verification                                         |
@@ -206,7 +208,9 @@ Finds the processed file in the Drive bucket under the caller's organization (`p
 **Request:**
 
 ```bash
-curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata \n  -H "x-org-id: org-1"
+curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata \
+  -H "x-api-key: $MOTIA_API_KEY" \
+  -H "x-org-id: org-1"
 ```
 
 **Headers:**
@@ -505,28 +509,29 @@ Motia orchestrates asynchronous jobs across dedicated worker queues configured i
 
 The service is configured via environment variables (loaded through `.env` in development or Docker environment injection in production):
 
-| Variable                           | Type     | Default         | Description                                                                |
-| ---------------------------------- | -------- | --------------- | -------------------------------------------------------------------------- |
-| `NODE_ENV`                         | `string` | `"development"` | Application environment (`development` \| `production`).                   |
-| `HOSTNAME`                         | `string` | System hostname | Host node identifier reported by `/health`.                                |
-| `MOTIA_APP_VERSION`                | `string` | None            | App version injected into `/health` response.                              |
-| `MOTIA_APP_BUILD_TIME`             | `string` | None            | Build timestamp injected into `/health` response.                          |
-| `MOTIA_DRIVE_R2_ENDPOINT`          | `string` | Required        | Cloudflare R2 / S3 API endpoint for the drive storage bucket.              |
-| `MOTIA_DRIVE_R2_BUCKET`            | `string` | Required        | Bucket name containing incoming uploads and drive assets.                  |
-| `MOTIA_DRIVE_R2_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                              |
-| `MOTIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                          |
-| `MOTIA_DRIVE_R2_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                     |
-| `MOTIA_DRIVE_URL`                  | `string` | Required        | Base URL of central drive service (notified at `/webhook/uploads/status`). |
-| `MOTIA_CDN_HOST`                   | `string` | Required        | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs.    |
-| `MOTIA_CDN_R2_ENDPOINT`            | `string` | Required        | S3/R2 API endpoint for public CDN cache bucket.                            |
-| `MOTIA_CDN_R2_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                         |
-| `MOTIA_CDN_R2_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                |
-| `MOTIA_CDN_R2_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                            |
-| `MOTIA_CDN_R2_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                       |
-| `MOTIA_LIVEKIT_URL`                | `string` | Required        | LiveKit SFU server host URL (e.g. `livekit.example.com`).                  |
-| `MOTIA_LIVEKIT_API_KEY`            | `string` | Required        | LiveKit server API key.                                                    |
-| `MOTIA_LIVEKIT_API_SECRET`         | `string` | Required        | LiveKit server API secret.                                                 |
-| `STREAMS_PORT`                     | `number` | `3114`          | Local port for `StreamModule` internal streams adapter.                    |
+| Variable                           | Type     | Default         | Description                                                                   |
+| ---------------------------------- | -------- | --------------- | ----------------------------------------------------------------------------- |
+| `NODE_ENV`                         | `string` | `"development"` | Application environment (`development` \| `production`).                      |
+| `HOSTNAME`                         | `string` | System hostname | Host node identifier reported by `/health`.                                   |
+| `MOTIA_APP_VERSION`                | `string` | None            | App version injected into `/health` response.                                 |
+| `MOTIA_APP_BUILD_TIME`             | `string` | None            | Build timestamp injected into `/health` response.                             |
+| `MOTIA_DRIVE_R2_ENDPOINT`          | `string` | Required        | Cloudflare R2 / S3 API endpoint for the drive storage bucket.                 |
+| `MOTIA_DRIVE_R2_BUCKET`            | `string` | Required        | Bucket name containing incoming uploads and drive assets.                     |
+| `MOTIA_DRIVE_R2_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                                 |
+| `MOTIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                             |
+| `MOTIA_DRIVE_R2_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                        |
+| `MOTIA_API_KEY`                    | `string` | Required        | Shared secret expected in the `x-api-key` request header.                     |
+| `MOTIA_DRIVE_URL`                  | `string` | Required        | Base URL of central drive service (notified at `/webhook/uploads/status`).    |
+| `MOTIA_CDN_HOST`                   | `string` | Required        | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs.       |
+| `MOTIA_CDN_R2_ENDPOINT`            | `string` | Required        | S3/R2 API endpoint for public CDN cache bucket.                               |
+| `MOTIA_CDN_R2_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                            |
+| `MOTIA_CDN_R2_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                   |
+| `MOTIA_CDN_R2_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                               |
+| `MOTIA_CDN_R2_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                          |
+| `MOTIA_LIVEKIT_URL`                | `string` | Required        | LiveKit SFU server URL including scheme (e.g. `https://livekit.example.com`). |
+| `MOTIA_LIVEKIT_API_KEY`            | `string` | Required        | LiveKit server API key.                                                       |
+| `MOTIA_LIVEKIT_API_SECRET`         | `string` | Required        | LiveKit server API secret.                                                    |
+| `STREAMS_PORT`                     | `number` | `3114`          | Local port for `StreamModule` internal streams adapter.                       |
 
 ---
 

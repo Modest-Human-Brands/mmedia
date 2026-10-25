@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { RoomServiceClient } from 'livekit-server-sdk'
 import getHlsUrl from 'src/utils/get-hls-url'
 import getRoomName from 'src/utils/get-room-name'
+import requireApiKey from 'src/utils/require-api-key'
 
 const roomService = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
 
@@ -32,8 +33,10 @@ export const config = {
   flows: ['stream-flow'],
   triggers: [
     http('GET', '/stream/:slug/:deviceId', {
+      middleware: [requireApiKey],
       responseSchema: {
         200: streamSchema,
+        401: z.object({ error: z.string() }),
         502: z.object({ error: z.string() }),
       },
     }),

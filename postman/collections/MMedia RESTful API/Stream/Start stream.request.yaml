@@ -3,6 +3,7 @@ description: Creates a WHIP ingress and starts HLS and MP4 egress for room slug_
 url: '{{base_url}}/stream/start'
 method: POST
 headers:
+  x-api-key: '{{api_key}}'
   Content-Type: application/json
 body:
   type: json
