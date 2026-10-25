@@ -15,6 +15,11 @@ export const config = {
           modifiers: z.record(z.string(), z.string()),
         }),
       }),
+      responseSchema: {
+        200: z.object({ streamPath: z.string(), contentType: z.string(), byteLength: z.number() }),
+        500: z.object({ error: z.string() }),
+        504: z.object({ error: z.string() }),
+      },
     }),
   ],
   enqueues: ['media.transform'],

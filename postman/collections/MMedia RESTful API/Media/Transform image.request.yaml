@@ -1,0 +1,32 @@
+$kind: http-request
+description: Queues an image transform and waits (up to 30s) for the result.
+url: '{{base_url}}/media/transform'
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "taskType": "transform:image",
+      "payload": {
+        "cacheKey": "image/s_100x100/sample.webp",
+        "mediaOriginId": "sample.jpg",
+        "modifiers": { "s": "100x100", "format": "webp" }
+      }
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status code is 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      pm.test("Body has streamPath, contentType and a real byteLength", function () {
+          const body = pm.response.json();
+          pm.expect(body.streamPath).to.be.a("string");
+          pm.expect(body.contentType).to.include("image/");
+          pm.expect(body.byteLength).to.be.above(0);
+      });
+    language: text/javascript
+order: 1000

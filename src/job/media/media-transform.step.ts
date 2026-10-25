@@ -17,13 +17,15 @@ const fs = createStorage({
   driver: fsDriver({ base: './static' }),
 })
 
+const MAX_RETRIES = 3
+
 export const config = {
-  name: 'MediaTransformer',
+  name: 'MediaTransformWorker',
   description: 'Image and video transcoding',
   flows: ['media-transform-flow'],
   triggers: [
     queue('media.transform', {
-      config: { maxRetries: 3, concurrency: 2 },
+      config: { maxRetries: MAX_RETRIES, concurrency: 2 },
       input: z.object({
         taskType: z.enum(['transform:image', 'transform:video']),
         payload: z.object({
@@ -102,14 +104,11 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
 
     logger.info(`[MediaTransformer] Task successful`, response)
 
-    const streamPath = `./static/${payload.cacheKey}`
-    const byteLength = 0 // replace with real value after processing
-
     await stateManager.set('media.result', traceId, {
       status: 'done',
-      streamPath,
+      streamPath: `./static/${payload.cacheKey}`,
       contentType,
-      byteLength,
+      byteLength: response.byteLength,
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -119,6 +118,16 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
     }
 
     logger.error(`[MediaTransformer] Fatal error during transformation`, error)
+
+    // Only report failure to the API once the final retry has failed
+    const attempts = ((await stateManager.get<number>('media.attempts', traceId)) ?? 0) + 1
+    if (attempts > MAX_RETRIES) {
+      await stateManager.set('media.result', traceId, { status: 'error' })
+      await stateManager.delete('media.attempts', traceId)
+    } else {
+      await stateManager.set('media.attempts', traceId, attempts)
+    }
+
     throw error
   } finally {
     // 4. Memory Management
