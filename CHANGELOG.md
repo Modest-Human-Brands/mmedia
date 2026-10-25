@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.9
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.8...v0.1.9)
+
+### 🚀 Enhancements
+
+- Update configuration and dependencies ([99adc87](https://github.com/Modest-Human-Brands/mmedia/commit/99adc87))
+- Add media transformation request and response handling ([4fe870c](https://github.com/Modest-Human-Brands/mmedia/commit/4fe870c))
+- Enhance media metadata retrieval and update documentation ([52d70ef](https://github.com/Modest-Human-Brands/mmedia/commit/52d70ef))
+- Add stream management endpoints and utility functions for HLS URL and room name generation ([6933bd7](https://github.com/Modest-Human-Brands/mmedia/commit/6933bd7))
+- Require x-org-Id header for media metadata retrieval and update related documentation ([c5180fd](https://github.com/Modest-Human-Brands/mmedia/commit/c5180fd))
+- Implement x-api-key authentication for media and stream endpoints ([96ceee9](https://github.com/Modest-Human-Brands/mmedia/commit/96ceee9))
+- Update readme with x-api-key usage and enhance media processing logic ([4f7ef99](https://github.com/Modest-Human-Brands/mmedia/commit/4f7ef99))
+
+### 🏡 Chore
+
+- Update .prettierignore and README.md for clarity and formatting ([dd5089e](https://github.com/Modest-Human-Brands/mmedia/commit/dd5089e))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi <shirsendu2001@gmail.com>
+
 ## v0.1.8
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.7...v0.1.8)
