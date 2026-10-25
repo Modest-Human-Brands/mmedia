@@ -162,7 +162,7 @@ The REST API runs on port `3111` by default (configurable via `iii-config.yaml`)
 | Method | Endpoint                   | Handler Step       | Description                                                          |
 | ------ | -------------------------- | ------------------ | -------------------------------------------------------------------- |
 | `GET`  | `/health`                  | `HealthCheck`      | Health and node verification                                         |
-| `GET`  | `/media/:mediaId/metadata` | `MediaGet`         | Retrieve technical EXIF/ffprobe metadata for an asset                |
+| `GET`  | `/media/:mediaId/metadata` | `MediaGet`         | Retrieve technical EXIF/ffprobe metadata for a processed asset       |
 | `POST` | `/media/transform`         | `MediaTransformer` | On-demand image/video transformation with synchronous wait           |
 | `POST` | `/webhook/media/uploads`   | `WebhookHandler`   | Bucket upload notification receiver (R2/S3)                          |
 | `GET`  | `/stream`                  | `StreamAllStatus`  | List all active LiveKit broadcast rooms and statuses                 |
@@ -201,54 +201,42 @@ curl -X GET http://localhost:3111/health
 
 #### `GET /media/:mediaId/metadata`
 
-Resolves a media file path using the drive synchronization registry and extracts technical metadata using `exifr` (images) or `ffprobe` (audio and video).
+Finds the processed file in the Drive bucket (`processed/<orgId>/<projectId>/<mediaId>.<ext>`), downloads it temporarily, and extracts technical metadata using `exifr` (images) or `ffprobe` (audio and video). Large files make this call slow.
 
 **Request:**
 
 ```bash
-curl -X GET http://localhost:3111/media/sample-video/metadata
+curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata
 ```
 
 **Path Parameters:**
 
-- `mediaId` (`string`, required): Asset slug or file identifier.
+- `mediaId` (`string`, required): Processed filename without extension (e.g. `photo-00001-0002-0003-000`).
 
 **Response (`200 OK`):**
 
 ```json
 {
-  "slug": "sample-video",
-  "type": "video",
-  "title": "sample-video",
+  "slug": "photo-00001-0002-0003-000",
+  "type": "photo",
+  "title": "photo-00001-0002-0003-000",
+  "thumbnailUrl": "https://site.example.com/media/image/s_400x400/photo-00001-0002-0003-000",
   "metadata": {
-    "kind": "video",
-    "format": {
-      "filename": "storage/uploads/sample-video.mp4",
-      "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
-      "duration": 12.4,
-      "size": 4829104,
-      "bitRate": 3115550,
-      "resolution": "1080p",
-      "aspectRatio": "16:9",
-      "bitDepth": "8 bit",
-      "camera": "Apple iPhone 15 Pro",
-      "location": {
-        "lat": 37.7749,
-        "lng": -122.4194
-      }
-    },
-    "stream": {
-      "codecName": "h264",
-      "codecType": "video",
-      "resolution": "1080p",
-      "aspectRatio": "16:9",
-      "bitRate": 3110000,
-      "duration": 12.4,
-      "frameRate": 30
+    "size": 4829104,
+    "bitDepth": "8 bit",
+    "resolution": "4032p",
+    "aspectRatio": "4:3",
+    "camera": "Apple iPhone 15 Pro",
+    "lens": "iPhone 15 Pro back camera",
+    "location": {
+      "lat": 37.7749,
+      "lng": -122.4194
     }
   }
 }
 ```
+
+`fps` is included for video. `thumbnailUrl` is built from `MOTIA_SITE_URL`.
 
 **Error Responses:**
 

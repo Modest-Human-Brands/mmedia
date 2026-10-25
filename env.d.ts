@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly MOTIA_DRIVE_R2_ENDPOINT: string
   readonly MOTIA_DRIVE_R2_BUCKET: string
 
+  readonly MOTIA_SITE_URL: string
   readonly MOTIA_CDN_HOST: string
   readonly MOTIA_LIVEKIT_URL: string
   readonly MOTIA_LIVEKIT_API_KEY: string
