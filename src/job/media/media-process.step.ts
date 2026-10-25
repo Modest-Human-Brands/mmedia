@@ -55,11 +55,7 @@ export const config = {
 } as const satisfies StepConfig
 
 export const handler: Handlers<typeof config> = async (input) => {
-  const { bucket, sourceKey, orgId, projectId, uploadId, batchId } = input as { bucket: string; sourceKey: string; orgId: string; projectId: string; uploadId: string; batchId: string }
-
-  console.log('----------------------------------------------')
-  console.log({ bucket, sourceKey, orgId, projectId, uploadId, batchId })
-  console.log('----------------------------------------------')
+  const { sourceKey, orgId, projectId, uploadId, batchId } = input as { sourceKey: string; orgId: string; projectId: string; uploadId: string; batchId: string }
 
   const filenameWithExt = sourceKey.split('/').pop() || ''
   const dotIndex = filenameWithExt.lastIndexOf('.')
@@ -73,38 +69,35 @@ export const handler: Handlers<typeof config> = async (input) => {
   const orgNumericId = Number(orgId.split('-').pop()) || 0
   const projNumericId = Number(projectId.split('-').pop()) || 0
 
-  const existingFiles = await r2GetAllFiles(r2Drive, {
-    endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT!,
-    bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET!,
-  })
-  const selectedFile = existingFiles.filter((f) => f === sourceKey)![0]
-
-  console.log('----------------------------------------------')
-  console.log({ existingFiles, selectedFile })
-  console.log('----------------------------------------------')
+  // Numbering is per project: only look at files already processed for this org/project
+  const existingFiles = await r2GetAllFiles(
+    r2Drive,
+    {
+      endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT!,
+      bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET!,
+    },
+    { prefix: `processed/${orgId}/${projectId}/` }
+  )
+  const existingNames = existingFiles.map((key) => (key.split('/').pop() || '').replace(/\.[^.]+$/, ''))
 
   const patternRegex = /^(photo|audio|video)-\d{5}-\d{4}-(\d{4})-\d{3}$/
   const match = originalNameClean.match(patternRegex)
 
-  const nextMediaId = match ? Number.parseInt(match[2], 10) : Math.max(...existingFiles.map((n) => Number.parseInt(n.match(patternRegex)?.[2] || '0', 10)), 0) + 1
+  const nextMediaId = match ? Number.parseInt(match[2], 10) : Math.max(...existingNames.map((n) => Number.parseInt(n.match(patternRegex)?.[2] || '0', 10)), 0) + 1
 
-  const nextVariantId = match ? Math.max(...existingFiles.map((n) => Number.parseInt(n.match(new RegExp(`^(photo|audio|video)-\\d{5}-\\d{4}-${match[2]}-(\\d{3})`))?.[2] || '-1', 10)), -1) + 1 : 0
+  const nextVariantId = match ? Math.max(...existingNames.map((n) => Number.parseInt(n.match(new RegExp(`^(photo|audio|video)-\\d{5}-\\d{4}-${match[2]}-(\\d{3})`))?.[2] || '-1', 10)), -1) + 1 : 0
 
   const paddedMedia = String(nextMediaId).padStart(4, '0')
   const newMediaId = `${mediaKind}-${String(orgNumericId).padStart(5, '0')}-${String(projNumericId).padStart(4, '0')}-${paddedMedia}-${String(nextVariantId).padStart(3, '0')}${ext}`
 
   const destinationKey = `processed/${orgId}/${projectId}/${newMediaId}`
 
-  const mediaId = encodeURI(selectedFile || '').replaceAll('/', '_')
+  const mediaId = encodeURI(sourceKey).replaceAll('/', '_')
   const sourcePath = `./static/source/${mediaId}`
   const storageSourceKey = `source/${mediaId}`
 
-  console.log('----------------------------------------------')
-  console.log({ destinationKey, mediaId, newMediaId })
-  console.log('----------------------------------------------')
-
   try {
-    const { stream } = await r2GetFileStream(r2Drive, encodeURI(selectedFile), import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
+    const { stream } = await r2GetFileStream(r2Drive, encodeURI(sourceKey), import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
 
     await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
 
@@ -135,7 +128,7 @@ export const handler: Handlers<typeof config> = async (input) => {
       endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT,
       bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET,
     })
-    await r2DriveStorage.del(existingFiles[0])
+    await r2DriveStorage.del(sourceKey)
 
     // Webhook Notification: Phase 2 Complete (100%)
     await $fetch('/webhook/uploads/status', {

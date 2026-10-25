@@ -264,6 +264,7 @@ Dispatches a synchronous-wait media transformation task. The handler stores a pe
 
 ```bash
 curl -X POST http://localhost:3111/media/transform \
+  -H "x-api-key: $MOTIA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "taskType": "transform:image",
@@ -298,9 +299,12 @@ curl -X POST http://localhost:3111/media/transform \
 }
 ```
 
+For `transform:video`, DASH output is written to `./static/<cacheKey>/` and the response returns the manifest, e.g. `{"streamPath": "./static/<cacheKey>/<name>.mpd", "contentType": "application/dash+xml", "byteLength": <manifest size>}`.
+
 **Error Responses:**
 
-- `500 Internal Server Error`: `{"error": "Media transform failed"}`
+- `401 Unauthorized`: `{"error": "Unauthorized"}`
+- `500 Internal Server Error`: `{"error": "Media transform failed"}` (returned only after the final retry fails)
 - `504 Gateway Timeout`: `{"error": "Timed out waiting for media transform"}` (exceeded 30,000ms deadline)
 
 ---
@@ -315,6 +319,7 @@ Receives S3/R2 bucket object-creation event notifications. Parses object metadat
 
 ```bash
 curl -X POST http://localhost:3111/webhook/media/uploads \
+  -H "x-api-key: $MOTIA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "Records": [
@@ -347,15 +352,23 @@ curl -X POST http://localhost:3111/webhook/media/uploads \
 export default {
   async queue(batch, env) {
     for (const message of batch.messages) {
-      await fetch('https://mmedia.example.com/webhook/media/uploads', {
+      await fetch(`${env.MMEDIA_URL}/webhook/media/uploads`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': env.API_KEY },
         body: JSON.stringify(message.body),
       })
+
       message.ack()
     }
   },
 }
+```
+
+Set the worker secrets `MMEDIA_URL` (base URL of this service, no trailing slash) and `API_KEY` (same value as `MOTIA_API_KEY`):
+
+```bash
+wrangler secret put MMEDIA_URL
+wrangler secret put API_KEY
 ```
 
 ---
@@ -369,7 +382,7 @@ mmedia integrates directly with LiveKit SFU (`livekit-server-sdk`) to handle Web
 Initiates an end-to-end streaming session for a given stream slug and device:
 
 1. Creates a LiveKit WHIP Ingress (`IngressInput.WHIP_INPUT`).
-2. Starts composite raw MP4 recording egress directly to S3/R2 (`recordings/<slug>/raw_<timestamp>.mp4`).
+2. Starts composite raw MP4 recording egress directly to S3/R2 (`recordings/<slug>/<deviceId>/raw_<timestamp>.mp4`).
 3. Starts 3 parallel room composite HLS egresses (480p, 720p, 1080p) sliced into 4-second segments.
 4. Generates a multi-bitrate HLS master playlist (`master.m3u8`) and uploads it to S3/R2 with `Cache-Control: no-cache`.
 
@@ -377,6 +390,7 @@ Initiates an end-to-end streaming session for a given stream slug and device:
 
 ```bash
 curl -X POST http://localhost:3111/stream/start \
+  -H "x-api-key: $MOTIA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "slug": "event-main",
@@ -394,17 +408,17 @@ curl -X POST http://localhost:3111/stream/start \
   "streamUrl": "https://livekit.example.com/whip",
   "streamKey": "ing_live_key_sample123",
   "token": "",
-  "media": "https://cdn.example.com/live/event-main/hls/master.m3u8"
+  "media": "https://cdn.example.com/live/event-main/cam-01/hls/master.m3u8"
 }
 ```
 
 **HLS Quality Profiles Configured:**
 
-| Quality   | Resolution | Framerate | Video Bitrate | Audio Bitrate | Output Path                        |
-| --------- | ---------- | --------- | ------------- | ------------- | ---------------------------------- |
-| **480p**  | 854x480    | 30 fps    | 1,500 kbps    | 128 kbps      | `live/<slug>/hls/480p/index.m3u8`  |
-| **720p**  | 1280x720   | 30 fps    | 3,000 kbps    | 128 kbps      | `live/<slug>/hls/720p/index.m3u8`  |
-| **1080p** | 1920x1080  | 30 fps    | 4,500 kbps    | 128 kbps      | `live/<slug>/hls/1080p/index.m3u8` |
+| Quality   | Resolution | Framerate | Video Bitrate | Audio Bitrate | Output Path                                   |
+| --------- | ---------- | --------- | ------------- | ------------- | --------------------------------------------- |
+| **480p**  | 854x480    | 30 fps    | 1,500 kbps    | 128 kbps      | `live/<slug>/<deviceId>/hls/480p/index.m3u8`  |
+| **720p**  | 1280x720   | 30 fps    | 3,000 kbps    | 128 kbps      | `live/<slug>/<deviceId>/hls/720p/index.m3u8`  |
+| **1080p** | 1920x1080  | 30 fps    | 4,500 kbps    | 128 kbps      | `live/<slug>/<deviceId>/hls/1080p/index.m3u8` |
 
 ---
 
@@ -415,7 +429,8 @@ Lists all active broadcasting rooms from the LiveKit Room Service and computes c
 **Request:**
 
 ```bash
-curl -X GET http://localhost:3111/stream
+curl -X GET http://localhost:3111/stream \
+  -H "x-api-key: $MOTIA_API_KEY"
 ```
 
 **Response (`200 OK`):**
@@ -426,8 +441,8 @@ curl -X GET http://localhost:3111/stream
     "slug": "event-main",
     "deviceId": "cam-01",
     "status": "live",
-    "streamUrl": "event-main_cam-01",
-    "media": "https://livekit.example.com/rooms/event-main_cam-01"
+    "streamUrl": "",
+    "media": "https://cdn.example.com/live/event-main/cam-01/hls/master.m3u8"
   }
 ]
 ```
@@ -441,17 +456,19 @@ Fetches status and CDN playback URLs for a specific room (`<slug>_<deviceId>`).
 **Request:**
 
 ```bash
-curl -X GET http://localhost:3111/stream/event-main/cam-01
+curl -X GET http://localhost:3111/stream/event-main/cam-01 \
+  -H "x-api-key: $MOTIA_API_KEY"
 ```
 
 **Response (`200 OK`):**
 
 ```json
 {
-  "slug": "event-main_cam-01",
+  "slug": "event-main",
+  "deviceId": "cam-01",
   "status": "live",
   "streamUrl": "",
-  "media": "https://cdn.example.com/live/event-main/hls/master.m3u8"
+  "media": "https://cdn.example.com/live/event-main/cam-01/hls/master.m3u8"
 }
 ```
 
@@ -467,6 +484,7 @@ Forcibly closes the LiveKit room, disconnects all participants and egress pipeli
 
 ```bash
 curl -X POST http://localhost:3111/stream/stop \
+  -H "x-api-key: $MOTIA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "slug": "event-main",
@@ -487,7 +505,9 @@ curl -X POST http://localhost:3111/stream/stop \
 **Error Responses:**
 
 - `400 Bad Request`: `{"error": "slug and deviceId required"}`
+- `401 Unauthorized`: `{"error": "Unauthorized"}`
 - `404 Not Found`: `{"error": "No active room found for event-main_cam-01"}`
+- `502 Bad Gateway`: `{"error": "Stream service unavailable"}` (LiveKit unreachable or failed)
 
 ---
 

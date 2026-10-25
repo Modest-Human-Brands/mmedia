@@ -2,6 +2,7 @@ import { type Handlers, logger, queue, stateManager, type StepConfig } from 'mot
 import { z } from 'zod'
 import mime from 'mime-types'
 import { createWriteStream } from 'node:fs'
+import { mkdir, stat } from 'node:fs/promises'
 import { Writable } from 'node:stream'
 import { createStorage } from 'unstorage'
 import fsDriver from 'unstorage/drivers/fs'
@@ -62,11 +63,11 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
 
     let finalStreamPath: string
     let contentType: string
+    let byteLength = 0
 
     // 3. Execution Branching
     if (taskType === 'transform:image') {
       const mimeType = mime.lookup(sourcePath)
-      console.log('media-transform.step.ts line 67', mimeType)
       const isVideoSource = typeof mimeType === 'string' && mimeType.startsWith('video/')
 
       let processingInput = sourcePath
@@ -85,28 +86,32 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
       finalStreamPath = `./static/${cacheKey}`
       contentType = (typeof modifiers.format === 'string' && mime.contentType(modifiers.format)) || 'image/jpeg'
     } else {
-      // Video-specific logic
-      const videoCachePath = `./static/cache/video`
+      // Video-specific logic: DASH output lives in its own folder per cacheKey
+      const videoOutputDir = `./static/${cacheKey}`
 
-      await ensureDir(videoCachePath)
-      await transcodeVideo(sourcePath, videoCachePath)
+      await mkdir(videoOutputDir, { recursive: true })
+      const { mpdFile } = await transcodeVideo(sourcePath, videoOutputDir)
 
-      finalStreamPath = videoCachePath
-      contentType = (typeof modifiers.format === 'string' && mime.contentType(modifiers.format)) || 'video/mp4'
+      finalStreamPath = mpdFile
+      contentType = 'application/dash+xml'
+      byteLength = (await stat(mpdFile)).size
     }
 
-    const metaData = await fs.getMeta(cacheKey)
+    if (taskType === 'transform:image') {
+      byteLength = ((await fs.getMeta(cacheKey))?.size as number) || 0
+    }
+
     const response = {
       streamPath: finalStreamPath,
       contentType,
-      byteLength: (metaData?.size as number) || 0,
+      byteLength,
     }
 
     logger.info(`[MediaTransformer] Task successful`, response)
 
     await stateManager.set('media.result', traceId, {
       status: 'done',
-      streamPath: `./static/${payload.cacheKey}`,
+      streamPath: response.streamPath,
       contentType,
       byteLength: response.byteLength,
     })
