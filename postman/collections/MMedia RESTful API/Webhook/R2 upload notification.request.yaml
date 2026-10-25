@@ -1,0 +1,36 @@
+$kind: http-request
+description: Cloudflare R2 object-created notification. Queues the file for processing.
+url: '{{base_url}}/webhook/media/uploads'
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+        "Records": [
+          {
+            "s3": {
+              "bucket": {
+                "name": "bucket-dev-media-origin"
+              },
+              "object": {
+                "key": "upload/red-cat-pictures-3/test-2/wallpaper-3-batch_34373084-up_4c61886a.jpg",
+                "size": 1886553
+              }
+            }
+          }
+        ]
+      }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Status code is 202", function () {
+          pm.response.to.have.status(202);
+      });
+
+      pm.test("Body confirms dispatch", function () {
+          pm.expect(pm.response.json().success).to.eql(true);
+      });
+    language: text/javascript
+order: 1000

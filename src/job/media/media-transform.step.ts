@@ -64,6 +64,7 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
     // 3. Execution Branching
     if (taskType === 'transform:image') {
       const mimeType = mime.lookup(sourcePath)
+      console.log('media-transform.step.ts line 67', mimeType)
       const isVideoSource = typeof mimeType === 'string' && mimeType.startsWith('video/')
 
       let processingInput = sourcePath

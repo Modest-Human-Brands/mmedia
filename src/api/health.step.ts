@@ -10,6 +10,9 @@ export const config = {
       responseSchema: {
         200: z.object({
           status: z.string(),
+          version: z.string().optional(),
+          buildTime: z.string().optional(),
+          node: z.string(),
         }),
       },
     }),

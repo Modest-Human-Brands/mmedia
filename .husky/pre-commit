@@ -4,6 +4,9 @@ set -e
 # Get the list of staged files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR | sed 's| |\\ |g')
 
+# Postman collections live in paths with spaces and are validated by `postman collection lint`, not eslint/prettier
+LINT_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -v '^postman/' | sed 's| |\\ |g' || true)
+
 # If gitleaks is available, scan each staged file
 if command -v gitleaks >/dev/null 2>&1; then
   for file in $STAGED_FILES; do
@@ -14,10 +17,10 @@ else
 fi
 
 # Lint the staged files
-bun lint $STAGED_FILES
+[ -z "$LINT_FILES" ] || bun lint $LINT_FILES
 
 # Format the staged files, ignoring unknown files
-bun format $STAGED_FILES --ignore-unknown
+[ -z "$LINT_FILES" ] || bun format $LINT_FILES --ignore-unknown
 
 # Update the index to mark the changes in the staged files
 git update-index --again

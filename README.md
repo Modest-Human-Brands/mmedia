@@ -1,66 +1,234 @@
-<p align="center">
-  <img src="./public/logo.png" alt="Logo" width="65" />
-</p>
+<h1 align="center">mmedia</h1>
 
-# MMedia
+<p align="center">
+  <strong>Event-driven media processing microservice & live streaming engine built on Motia, Bun, FFmpeg, and LiveKit.</strong>
+</p>
 
 <p align="center">
   <a href="https://shirsendu-bairagi.betteruptime.com">
-    <img src="https://uptime.betterstack.com/status-badges/v3/monitor/10aqw.svg" alt="Uptime Status">
+    <img src="https://uptime.betterstack.com/status-badges/v3/monitor/10aqw.svg" alt="Uptime Status" />
+  </a>
+  <a href="https://github.com/Modest-Human-Brands/mmedia/releases">
+    <img src="https://img.shields.io/github/v/release/Modest-Human-Brands/mmedia?color=blue&label=version" alt="Latest Version" />
+  </a>
+  <a href="https://github.com/Modest-Human-Brands/mmedia/actions/workflows/integrate.yml">
+    <img src="https://github.com/Modest-Human-Brands/mmedia/actions/workflows/integrate.yml/badge.svg" alt="Motia CI" />
+  </a>
+  <a href="https://github.com/Modest-Human-Brands/mmedia/pkgs/container/mmedia">
+    <img src="https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker" alt="Docker Container" />
+  </a>
+  <a href="https://bun.sh">
+    <img src="https://img.shields.io/badge/runtime-Bun%20%5E1.2.9-fbf0df?logo=bun" alt="Bun Runtime" />
+  </a>
+  <a href="https://github.com/Modest-Human-Brands/mmedia/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" />
   </a>
 </p>
 
-![Landing](public/previews/landing.webp)
+---
 
-> An open-source media backend platform for ingesting, transcoding, storing, and delivering video and image assets via a global CDN — with built-in live streaming support over SRT.
+## Overview
 
-# Spec
+**mmedia** is a containerized, event-driven media processing and streaming microservice. It provides automated cloud storage ingestion (Cloudflare R2 / AWS S3), on-demand image optimization and video thumbnailing via IPX and Sharp, hardware-accelerated multi-codec DASH transcoding via FFmpeg, and scalable WebRTC-to-HLS live broadcasting powered by LiveKit SFU.
 
-## 0. Core & Health Layer
+Built on the **Motia** step-orchestration framework and the **III** distributed engine, mmedia pairs persistent state storage and background worker queues with built-in OpenTelemetry instrumentation and health diagnostics.
 
-### `GET /api/health`
+### Features
 
-**Description:** Verification ping to check system readiness and isolate active compute worker processing infrastructure nodes.
+- 🚀 **Hardware-Accelerated Transcoding**: Multi-codec DASH segmentation (AV1, HEVC, VP9, H.264) with runtime auto-detection for NVIDIA NVENC and Intel QSV hardware encoders, plus robust software fallbacks (`libsvtav1`, `libx265`, `libx264`).
+- 📡 **WebRTC & LiveKit Live Ingestion**: Single-call orchestration for WHIP WebRTC ingress, real-time multi-bitrate HLS egress (1080p, 720p, 480p), automated master playlist (`master.m3u8`) assembly, and raw MP4 cloud archival.
+- 🖼️ **On-the-Fly Image Optimization**: Fast image transformations (resizing, format conversion to WebP/AVIF, quality tuning) powered by IPX, with automatic frame extraction for video assets.
+- ⚡ **Event-Driven Task Orchestration**: Reactive step execution with background queue processing (`media.process`, `media.transform`), concurrency controls, automatic retry policies, and state tracking.
+- ☁️ **Cloud Native S3/R2 Streaming**: Direct stream-based uploads and downloads via `aws4fetch` and `unstorage`, integrated with Cloudflare Worker edge webhook forwarding.
+- 🔍 **Deep Media Metadata & EXIF**: Automated technical format extraction (resolution, aspect ratio, codecs, bit depth, camera make/model, lens, GPS coordinates) via `exifr`, `image-meta`, and `ffprobe`.
 
-**Input:** _(None)_
+---
 
-**Output (JSON):**
+## Architecture
+
+```mermaid
+flowchart TD
+    Client(["Client / CDN / Broadcaster"])
+
+    subgraph MMedia ["mmedia Microservice (Motia & III Engine :3111)"]
+        direction TB
+        Health["GET /health"]
+        Metadata["GET /media/:mediaId/metadata"]
+        TransformAPI["POST /media/transform"]
+        Webhook["POST /webhook/media/uploads"]
+        StreamAPI["LiveKit Routes (/stream, /stream/start, /stream/stop)"]
+
+        subgraph Queues ["Background Task Queues"]
+            QProcess["Queue: media.process"]
+            QTransform["Queue: media.transform"]
+            QStream["Queue: stream.processed"]
+        end
+
+        StateStore[("KvStore / State Store (media.result)")]
+    end
+
+    subgraph Transcoders ["Media Processing Engines"]
+        IPX["IPX / Sharp (Images & Thumbnails)"]
+        FFmpeg["FFmpeg (Hardware NVENC/QSV + DASH)"]
+    end
+
+    subgraph External ["Cloud Infrastructure"]
+        LiveKitSFU["LiveKit SFU (WHIP / Egress Workers)"]
+        R2Storage[("Cloudflare R2 / AWS S3 (Drive & CDN)")]
+        DriveWebhook["Central Drive Status Webhook"]
+    end
+
+    Client -->|HTTP REST| Health
+    Client -->|Metadata Query| Metadata
+    Client -->|Transcode Request| TransformAPI
+    Client -->|WHIP WebRTC Ingest| LiveKitSFU
+    Client -->|HLS Stream Consumption| R2Storage
+
+    Webhook -->|Queue Task| QProcess
+    TransformAPI -->|Queue & Poll| QTransform
+    TransformAPI <-->|State Polling (30s)| StateStore
+
+    QProcess -->|Extract Metadata & Standardize| R2Storage
+    QProcess -->|Progress Reports| DriveWebhook
+
+    QTransform -->|Process Image| IPX
+    QTransform -->|Process DASH Video| FFmpeg
+    QTransform -->|Update Result| StateStore
+
+    StreamAPI -->|Manage Rooms & Ingress/Egress| LiveKitSFU
+    LiveKitSFU -->|Egress MP4 & HLS Chunks| R2Storage
+```
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- [Bun](https://bun.sh) (`^1.2.9` or higher, repo pinned to `1.4.2`) or [Node.js](https://nodejs.org) (`^22.11.0 || ^24.14.0`)
+- [FFmpeg](https://ffmpeg.org) and `ffprobe` installed and present in your system `PATH`
+- [III Engine](https://install.iii.dev) CLI binary installed
+- Cloudflare R2 or AWS S3 credentials (and LiveKit server credentials for streaming)
+
+### Running with Docker
+
+Pre-built Docker images are published to the GitHub Container Registry:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/modest-human-brands/mmedia:latest
+
+# Run container with environment configuration
+docker run -d \
+  --name mmedia \
+  --env-file .env.prod \
+  -p 3111:3111 \
+  -p 3114:3114 \
+  ghcr.io/modest-human-brands/mmedia:latest
+```
+
+### Local Development Setup
+
+1. **Clone and install dependencies:**
+
+   ```bash
+   git clone https://github.com/Modest-Human-Brands/mmedia.git
+   cd mmedia
+   bun install --frozen-lockfile
+   ```
+
+2. **Configure environment variables:**
+
+   Copy `.env.prod` or create `.env`:
+
+   ```bash
+   cp .env.prod .env
+   ```
+
+3. **Start the development server:**
+
+   ```bash
+   bun run dev
+   ```
+
+   This launches the `iii` engine runtime with `iii-config.yaml` and starts Motia in watch mode on port `3111`.
+
+---
+
+## REST API Reference
+
+The REST API runs on port `3111` by default (configurable via `iii-config.yaml`).
+
+| Method | Endpoint                   | Handler Step       | Description                                                          |
+| ------ | -------------------------- | ------------------ | -------------------------------------------------------------------- |
+| `GET`  | `/health`                  | `HealthCheck`      | Health and node verification                                         |
+| `GET`  | `/media/:mediaId/metadata` | `MediaGet`         | Retrieve technical EXIF/ffprobe metadata for an asset                |
+| `POST` | `/media/transform`         | `MediaTransformer` | On-demand image/video transformation with synchronous wait           |
+| `POST` | `/webhook/media/uploads`   | `WebhookHandler`   | Bucket upload notification receiver (R2/S3)                          |
+| `GET`  | `/stream`                  | `StreamAllStatus`  | List all active LiveKit broadcast rooms and statuses                 |
+| `GET`  | `/stream/:slug/:deviceId`  | `StreamStatus`     | Query status and playback URLs for a specific stream                 |
+| `POST` | `/stream/start`            | `StreamStart`      | Provision WHIP ingress, multi-quality HLS egress, and raw MP4 egress |
+| `POST` | `/stream/stop`             | `StreamStop`       | Terminate a live broadcast session and clean up LiveKit room         |
+
+---
+
+### Core & Health Layer
+
+#### `GET /health`
+
+Returns service health, version, build time, and host node name.
+
+**Request:**
+
+```bash
+curl -X GET http://localhost:3111/health
+```
+
+**Response (`200 OK`):**
 
 ```json
 {
   "status": "OK",
-  "node": "Gigabyte"
+  "version": "0.1.8",
+  "buildTime": "2026-10-16T12:00:00.000Z",
+  "node": "worker-node-01"
 }
 ```
 
 ---
 
-### `GET /api/media/[mediaId]/metadata`
+### Media Metadata Layer
 
-**Description:** Retrieves a single media item's enhanced technical metadata and deep EXIF properties using its unique slug or identifier.
+#### `GET /media/:mediaId/metadata`
 
-**Input (Path Parameter):**
+Resolves a media file path using the drive synchronization registry and extracts technical metadata using `exifr` (images) or `ffprobe` (audio and video).
 
-- `mediaId` (string): The unique slug or resource identifier of the media asset.
+**Request:**
 
-**Output (JSON):**
+```bash
+curl -X GET http://localhost:3111/media/sample-video/metadata
+```
+
+**Path Parameters:**
+
+- `mediaId` (`string`, required): Asset slug or file identifier.
+
+**Response (`200 OK`):**
 
 ```json
 {
-  "slug": "video-vacation-2026",
+  "slug": "sample-video",
   "type": "video",
-  "title": "video-vacation-2026",
+  "title": "sample-video",
   "metadata": {
     "kind": "video",
     "format": {
-      "filename": "storage/uploads/video-vacation-2026.mp4",
+      "filename": "storage/uploads/sample-video.mp4",
       "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
-      "size": 4829104,
       "duration": 12.4,
+      "size": 4829104,
       "bitRate": 3115550,
-      "width": 1920,
-      "height": 1080,
-      "resolution": "1920x1080",
+      "resolution": "1080p",
       "aspectRatio": "16:9",
       "bitDepth": "8 bit",
       "camera": "Apple iPhone 15 Pro",
@@ -72,8 +240,8 @@
     "stream": {
       "codecName": "h264",
       "codecType": "video",
-      "width": 1920,
-      "height": 1080,
+      "resolution": "1080p",
+      "aspectRatio": "16:9",
       "bitRate": 3110000,
       "duration": 12.4,
       "frameRate": 30
@@ -82,33 +250,91 @@
 }
 ```
 
+**Error Responses:**
+
+- `404 Not Found`: `{"error": "Media not found: <mediaId>"}`
+- `500 Internal Server Error`: `{"error": "Internal Server Error while extracting metadata"}`
+
 ---
 
-## 1. Storage & On-Demand Transcoding Layer
+### Media Transformation Layer
 
-### `POST /webhook/media/uploads`
+#### `POST /media/transform`
 
-**Description:** Non-blocking storage-provider bucket event listener triggered automatically by Cloudflare R2 / AWS S3 when binary byte streams finish landing in the cloud. Instantly replies with `202 Accepted` and dispatches execution tasks into the background worker orchestration queue.
+Dispatches a synchronous-wait media transformation task. The handler stores a pending record in `stateManager`, enqueues a `media.transform` worker job, and polls for completion up to 30 seconds.
 
-**Input (JSON - Storage Event Structure):**
+**Request:**
+
+```bash
+curl -X POST http://localhost:3111/media/transform \
+  -H "Content-Type: application/json" \
+  -d '{
+    "taskType": "transform:image",
+    "payload": {
+      "cacheKey": "cache/images/product-thumb.webp",
+      "mediaOriginId": "uploads/org_1/prj_2/product.jpg",
+      "modifiers": {
+        "format": "webp",
+        "width": "800",
+        "quality": "80"
+      }
+    }
+  }'
+```
+
+**Request Body Schema:**
+
+| Field                   | Type                                       | Required | Description                                                                                   |
+| ----------------------- | ------------------------------------------ | -------- | --------------------------------------------------------------------------------------------- |
+| `taskType`              | `"transform:image"` \| `"transform:video"` | Yes      | Target transformation pipeline.                                                               |
+| `payload.cacheKey`      | `string`                                   | Yes      | Storage cache path/key where processed artifact is written.                                   |
+| `payload.mediaOriginId` | `string`                                   | Yes      | Source object key in cloud storage.                                                           |
+| `payload.modifiers`     | `Record<string, string>`                   | Yes      | Key-value modifier map passed to IPX or FFmpeg (e.g. `format`, `width`, `height`, `quality`). |
+
+**Response (`200 OK`):**
 
 ```json
 {
-  "Records": [
-    {
-      "s3": {
-        "bucket": { "name": "production-media-vault" },
-        "object": {
-          "key": "upload/org_1/prj_8f92a1b/vacation1-batch_abc123-up_7x89dz.jpg",
-          "size": 500000
-        }
-      }
-    }
-  ]
+  "streamPath": "./static/cache/images/product-thumb.webp",
+  "contentType": "image/webp",
+  "byteLength": 45120
 }
 ```
 
-**Output (JSON):**
+**Error Responses:**
+
+- `500 Internal Server Error`: `{"error": "Media transform failed"}`
+- `504 Gateway Timeout`: `{"error": "Timed out waiting for media transform"}` (exceeded 30,000ms deadline)
+
+---
+
+### Storage Webhook Ingestion Layer
+
+#### `POST /webhook/media/uploads`
+
+Receives S3/R2 bucket object-creation event notifications. Parses object metadata, notifies the central drive status webhook that processing has started, and dispatches a background task to the `media.process` queue.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:3111/webhook/media/uploads \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Records": [
+      {
+        "s3": {
+          "bucket": { "name": "production-media-vault" },
+          "object": {
+            "key": "upload/org_1/prj_8f92a1b/photo-batch123-up456.jpg",
+            "size": 5242880
+          }
+        }
+      }
+    ]
+  }'
+```
+
+**Response (`202 Accepted`):**
 
 ```json
 {
@@ -117,293 +343,258 @@
 }
 ```
 
----
+**Edge Integration (Cloudflare Workers):**
+`worker/r2-event.js` provides an out-of-the-box Cloudflare Queue consumer to forward R2 notifications to this endpoint:
 
-### `POST /api/media/transform`
-
-**Description:** Consolidated pipeline execution endpoint for processing, modifying, and transcoding both image and video assets. Updated to support hardware-accelerated Adaptive Bitrate (ABR) segmentation and Dynamic Adaptive Streaming over HTTP (DASH) manifest files.
-
-**Input (JSON Body):**
-
-```json
-{
-  "taskType": "transform:video",
-  "payload": {
-    "cacheKey": "dash_prj_8f9_Garment_Shoot",
-    "mediaOriginId": "upload/org_1/prj_8f9/Garment_Shoot.mov",
-    "modifiers": {
-      "format": "dash",
-      "preset": "abr_standard"
+```javascript
+export default {
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      await fetch('https://mmedia.example.com/webhook/media/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(message.body),
+      })
+      message.ack()
     }
-  }
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "traceId": "motia_trk_99182x",
-  "status": "queued",
-  "message": "DASH transcoding job dispatched to hardware encoders."
-}
-```
-
----
-
-## 2. Live Streaming Pipeline (LiveKit Core Integration)
-
-### `POST /api/stream/ingress`
-
-**Description:** Called by `MSync` or the administration dashboard to provision a dedicated hardware ingestion resource, mapping an incoming standard broadcasting client (e.g., OBS Studio via RTMP) to a real-time WebRTC room cluster.
-
-**Input (JSON Body):**
-
-```json
-{
-  "projectId": "prj_8f92a1b",
-  "roomName": "live-shoot-garment",
-  "participantName": "Studio-Camera-A"
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "ingressId": "ing_9981az",
-  "rtmpUrl": "rtmp://ingress.livekit.modesthumanbrands.com/live",
-  "streamKey": "",
-  "roomName": "live-shoot-garment"
-}
-```
-
----
-
-### `POST /api/stream/token`
-
-**Description:** Provisions a cryptographic JWT access token allowing real-time client web or desktop applications to establish a direct connection to the LiveKit SFU WebRTC room.
-
-**Input (JSON Body):**
-
-```json
-{
-  "roomName": "live-shoot-garment",
-  "identity": "client_justin",
-  "isPublisher": false
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "token": ".....",
-  "wsUrl": "wss://livekit.modesthumanbrands.com"
-}
-```
-
----
-
-## 3. Live Delivery Optimization & Archiving (Egress)
-
-### `POST /api/stream/egress/hls`
-
-**Description:** Spawns a LiveKit Egress worker node to intercept the room's live WebRTC components, mixing and packaging them into a highly scalable HTTP Live Streaming (HLS) `.m3u8` manifest file. The resulting data chunks are saved directly onto your storage cluster to guarantee infinite CDN delivery scaling.
-
-**Input (JSON Body):**
-
-```json
-{
-  "roomName": "live-shoot-garment",
-  "storageProvider": "s3",
-  "bucket": "production-media-vault",
-  "outputPrefix": "live/prj_8f92a1b/garment-shoot"
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "egressId": "eg_77xxyyzz",
-  "status": "starting",
-  "hlsUrl": "https://cdn.modesthumanbrands.com/live/prj_8f92a1b/garment-shoot/stream.m3u8",
-  "message": "HLS Egress started. Stream will be available at the URL in ~10 seconds."
-}
-```
-
----
-
-### `POST /api/stream/egress/record`
-
-**Description:** Initiates a low-overhead Track Egress job that intercepts and archives raw, uncompressed media layers directly from the WebRTC publisher stream. Saves audio and video into their exact native formats (e.g., Opus and H.264) without server-side transcoding, ensuring maximum fidelity for post-production.
-
-**Input (JSON Body):**
-
-```json
-{
-  "roomName": "live-shoot-garment",
-  "participantIdentity": "Studio-Camera-A",
-  "storageProvider": "s3",
-  "bucket": "production-media-vault",
-  "outputPrefix": "archives/prj_8f92a1b/garment-shoot/raw"
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "egressId": "eg_raw_88bbcc",
-  "status": "starting",
-  "message": "Raw track recording started.",
-  "expectedOutputs": {
-    "video": "archives/prj_8f92a1b/garment-shoot/raw/video_Studio-Camera-A.mp4",
-    "audio": "archives/prj_8f92a1b/garment-shoot/raw/audio_Studio-Camera-A.ogg"
-  }
-}
-```
-
----
-
-## 4. Real-Time Interactivity (Chat & Engagement)
-
-### `POST /api/stream/chat/token`
-
-**Description:** Issues a lightweight, specialized LiveKit WebRTC access token limited exclusively to the real-time Data Channel. This allows massive audiences watching the cached CDN HLS feed to securely interact via live text comment streams and emoji reactions without incurring the heavy server costs associated with media track subscriptions.
-
-**Input (JSON Body):**
-
-```json
-{
-  "roomName": "live-shoot-garment",
-  "identity": "viewer_justin",
-  "metadata": {
-    "avatar": "url_to_avatar.jpg",
-    "role": "viewer"
-  }
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "token": "....",
-  "wsUrl": "wss://livekit.modesthumanbrands.com",
-  "capabilities": ["subscribe_data", "publish_data"]
-}
-```
-
----
-
-## 5. Audience Analytics & Telemetry Layer
-
-> ### Analytical Methodology Architecture Overview
->
-> - **WebRTC (Hosts/VIPs/Publishers):** Monitored natively via the infrastructure control plane. Real-time updates utilize standard webhooks (`participant_joined`, `participant_left`) coupled with session telemetry tracing to build instantaneous state maps.
-> - **HLS (Scalable Audience Masses):** Managed via a decoupled client-to-backend pipeline. High-concurrency web clients use structured polling intervals against a CDN-backed telemetry receiver to calculate accurate geo-distributed active watcher counts.
-
-### `POST /api/stream/analytics/heartbeat`
-
-**Description:** A lightweight, high-frequency status check invoked by client video players every 30 to 60 seconds during live HLS consumption. Computes audience counts and isolates viewer coordinates via Edge Geo-IP infrastructure routing headers (e.g., Cloudflare's `CF-IPCountry`).
-
-**Input (JSON Body):**
-
-```json
-{
-  "roomName": "live-shoot-garment",
-  "viewerId": "viewer_justin",
-  "platform": "web_safari"
-}
-```
-
-**Output (JSON):**
-
-```json
-{
-  "success": true,
-  "liveStats": {
-    "currentViewers": 14203,
-    "topLocations": ["US", "IN", "UK"]
-  }
-}
-```
-
----
-
-### `GET /api/stream/[roomName]/telemetry-baseline`
-
-**Description:** Retrieves reference encoding presets and upstream container properties from the active live broadcast. Client applications combine these properties with local hardware execution matrices to generate comprehensive "Stats for Nerds" panels.
-
-**Input (Path Parameter):**
-
-- `roomName` (string): The active live room identifier.
-
-**Output (JSON):**
-
-```json
-{
-  "roomName": "live-shoot-garment",
-  "sourceProfile": {
-    "engine": "LiveKit SFU",
-    "videoCodec": "h264",
-    "audioCodec": "opus",
-    "targetResolution": "1920x1080",
-    "targetFps": 30,
-    "maxBitrateBps": 4500000
   },
-  "egressProfile": {
-    "hlsManifestUrl": "https://cdn.modesthumanbrands.com/live/prj_8f92a1b/garment-shoot/stream.m3u8",
-    "segmentLengthSeconds": 2,
-    "abrVariants": ["1080p", "720p", "480p"]
-  }
 }
 ```
 
 ---
 
-### Client-Side Render Target (Reference Structure)
+### Live Streaming Pipeline (LiveKit Core)
 
-The client application compiles the response from `/telemetry-baseline` with properties pulled from local browser browser telemetry engines (`RTCPeerConnection.getStats()` or HLS buffer trackers) to power the player stats overlay interface:
+mmedia integrates directly with LiveKit SFU (`livekit-server-sdk`) to handle WebRTC ingest, multi-quality adaptive HLS egress, and raw archival.
+
+#### `POST /stream/start`
+
+Initiates an end-to-end streaming session for a given stream slug and device:
+
+1. Creates a LiveKit WHIP Ingress (`IngressInput.WHIP_INPUT`).
+2. Starts composite raw MP4 recording egress directly to S3/R2 (`recordings/<slug>/raw_<timestamp>.mp4`).
+3. Starts 3 parallel room composite HLS egresses (480p, 720p, 1080p) sliced into 4-second segments.
+4. Generates a multi-bitrate HLS master playlist (`master.m3u8`) and uploads it to S3/R2 with `Cache-Control: no-cache`.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:3111/stream/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "event-main",
+    "deviceId": "cam-01"
+  }'
+```
+
+**Response (`200 OK`):**
 
 ```json
 {
-  "connectionType": "HLS (CDN Distributed)",
-  "resolvedUrl": "https://cdn.modesthumanbrands.com/live/prj_8f92a1b/garment-shoot/stream_1080p.m3u8",
-  "codec": "avc1.64002a (H.264 High Profile)",
-  "currentResolution": "1920x1080",
-  "displayFps": 29.97,
-  "droppedFrames": 4,
-  "streamLatency": "12.4s",
-  "bufferLength": "6.2s",
-  "downloadSpeedMbps": 48.2
+  "slug": "event-main",
+  "deviceId": "cam-01",
+  "status": "starting",
+  "streamUrl": "https://livekit.example.com/whip",
+  "streamKey": "ing_live_key_sample123",
+  "token": "",
+  "media": "https://cdn.example.com/live/event-main/hls/master.m3u8"
 }
 ```
 
-### Roadmap
+**HLS Quality Profiles Configured:**
 
-| Order  | Route                                           | Module                                    | Complexity Profile                                                                                                                                                        | Status         |
-| ------ | ----------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| **1**  | `GET /api/health`                               | 0. Core & Health Layer                    | **Trivial**: Simple hardcoded static JSON response checking node availability.                                                                                            | ✅ **Done**    |
-| **2**  | `GET /api/media/[mediaId]/metadata`             | 0. Core & Health Layer                    | **Low**: Standard database lookup by unique slug or identifier to fetch deep EXIF metadata and asset dimensions.                                                          | ⏳ **Pending** |
-| **3**  | `POST /webhook/media/uploads`                   | 1. Storage & On-Demand Transcoding Layer  | **Medium**: Ingestion of cloud bucket event payloads (S3/R2). Requires fast input validation, immediate `202 Accepted` response, and asynchronous job queuing.            | ⏳ **Pending** |
-| **4**  | `POST /api/media/transform`                     | 1. Storage & On-Demand Transcoding Layer  | **High**: Orchestrates hardware-accelerated adaptive bitrate (ABR) segmentation pipelines and generates dynamic DASH manifest paths.                                      | ⏳ **Pending** |
-| **5**  | `POST /api/stream/ingress`                      | 2. Live Streaming Pipeline                | **Medium-High**: Integrates directly with the LiveKit API to spin up dedicated ingestion resources, translating incoming RTMP streams to WebRTC clusters.                 | ⏳ **Pending** |
-| **6**  | `POST /api/stream/token`                        | 2. Live Streaming Pipeline                | **Low**: Cryptographic JWT token generation utilizing the LiveKit Server SDK to grant secure, room-scoped WebRTC access.                                                  | ⏳ **Pending** |
-| **7**  | `POST /api/stream/egress/hls`                   | 3. Live Delivery Optimization & Archiving | **High**: Dispatches LiveKit Egress workers to combine live WebRTC tracks, slice segments, and output scalable HLS `.m3u8` manifests directly to storage CDN origins.     | ⏳ **Pending** |
-| **8**  | `POST /api/stream/egress/record`                | 3. Live Delivery Optimization & Archiving | **High**: Initiates low-level track interceptors to extract raw audio/video tracks (Opus/H.264) without server transcoding, saving files directly to cloud storage.       | ⏳ **Pending** |
-| **9**  | `POST /api/stream/chat/token`                   | 4. Real-Time Interactivity                | **Low**: Issues restricted JWT access tokens bounded exclusively to the WebRTC Data Channel payload layer to minimize compute overhead for massive chat audiences.        | ⏳ **Pending** |
-| **10** | `POST /api/stream/analytics/heartbeat`          | 5. Audience Analytics & Telemetry Layer   | **Medium-High**: High-frequency telemetry endpoint. Must handle high concurrency, parse Edge Geo-IP routing headers (`CF-IPCountry`), and update real-time viewer counts. | ⏳ **Pending** |
-| **11** | `GET /api/stream/[roomName]/telemetry-baseline` | 5. Audience Analytics & Telemetry Layer   | **Low-Medium**: Reads infrastructure profiles and HLS variant lengths from the active broadcast context to construct diagnostic baselines for client-side overlays.       | ⏳ **Pending** |
+| Quality   | Resolution | Framerate | Video Bitrate | Audio Bitrate | Output Path                        |
+| --------- | ---------- | --------- | ------------- | ------------- | ---------------------------------- |
+| **480p**  | 854x480    | 30 fps    | 1,500 kbps    | 128 kbps      | `live/<slug>/hls/480p/index.m3u8`  |
+| **720p**  | 1280x720   | 30 fps    | 3,000 kbps    | 128 kbps      | `live/<slug>/hls/720p/index.m3u8`  |
+| **1080p** | 1920x1080  | 30 fps    | 4,500 kbps    | 128 kbps      | `live/<slug>/hls/1080p/index.m3u8` |
 
-Progress = 1/11 = 9%
+---
+
+#### `GET /stream`
+
+Lists all active broadcasting rooms from the LiveKit Room Service and computes current status.
+
+**Request:**
+
+```bash
+curl -X GET http://localhost:3111/stream
+```
+
+**Response (`200 OK`):**
+
+```json
+[
+  {
+    "slug": "event-main",
+    "deviceId": "cam-01",
+    "status": "live",
+    "streamUrl": "event-main_cam-01",
+    "media": "https://livekit.example.com/rooms/event-main_cam-01"
+  }
+]
+```
+
+---
+
+#### `GET /stream/:slug/:deviceId`
+
+Fetches status and CDN playback URLs for a specific room (`<slug>_<deviceId>`).
+
+**Request:**
+
+```bash
+curl -X GET http://localhost:3111/stream/event-main/cam-01
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "slug": "event-main_cam-01",
+  "status": "live",
+  "streamUrl": "",
+  "media": "https://cdn.example.com/live/event-main/hls/master.m3u8"
+}
+```
+
+_Possible `status` values:_ `idle`, `starting`, `live`, `paused`, `stopping`, `stopped`, `error`, `processing`, `ready`.
+
+---
+
+#### `POST /stream/stop`
+
+Forcibly closes the LiveKit room, disconnects all participants and egress pipelines, and emits a `stream.stopped` queue event.
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:3111/stream/stop \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "event-main",
+    "deviceId": "cam-01"
+  }'
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "stopped": true,
+  "slug": "event-main",
+  "deviceId": "cam-01"
+}
+```
+
+**Error Responses:**
+
+- `400 Bad Request`: `{"error": "slug and deviceId required"}`
+- `404 Not Found`: `{"error": "No active room found for event-main_cam-01"}`
+
+---
+
+## Background Queues & Workflows
+
+Motia orchestrates asynchronous jobs across dedicated worker queues configured in `src/job/`:
+
+| Topic / Flow                    | Concurrency | Retries | Step               | Description                                                                                                                                                                         |
+| ------------------------------- | ----------- | ------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.process`                 | `1`         | `3`     | `MediaProcessor`   | Downloads uploaded file from R2, extracts metadata, standardizes asset filename, uploads to `processed/` path, cleans up temporary source, and sends progress webhooks (60%, 100%). |
+| `media.transform`               | `2`         | `3`     | `MediaTransformer` | Executes IPX image resizing/conversion or FFmpeg DASH transcoding, saves output to disk cache, and updates `stateManager` (`media.result`).                                         |
+| `media.file.metadata.extracted` | `1`         | `0`     | `MediaNotionSync`  | Creates a Notion asset database entry with extracted metadata and dimensions.                                                                                                       |
+| `stream.processed`              | `1`         | `0`     | `StreamUpload`     | Uploads finalized stream artifacts to target cloud buckets.                                                                                                                         |
+| `stream.stopped`                | `1`         | `0`     | Event Consumer     | Emitted upon room termination for downstream cleanup.                                                                                                                               |
+
+---
+
+## Configuration Reference
+
+The service is configured via environment variables (loaded through `.env` in development or Docker environment injection in production):
+
+| Variable                           | Type     | Default         | Description                                                                |
+| ---------------------------------- | -------- | --------------- | -------------------------------------------------------------------------- |
+| `NODE_ENV`                         | `string` | `"development"` | Application environment (`development` \| `production`).                   |
+| `HOSTNAME`                         | `string` | System hostname | Host node identifier reported by `/health`.                                |
+| `MOTIA_APP_VERSION`                | `string` | None            | App version injected into `/health` response.                              |
+| `MOTIA_APP_BUILD_TIME`             | `string` | None            | Build timestamp injected into `/health` response.                          |
+| `MOTIA_DRIVE_R2_ENDPOINT`          | `string` | Required        | Cloudflare R2 / S3 API endpoint for the drive storage bucket.              |
+| `MOTIA_DRIVE_R2_BUCKET`            | `string` | Required        | Bucket name containing incoming uploads and drive assets.                  |
+| `MOTIA_DRIVE_R2_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                              |
+| `MOTIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                          |
+| `MOTIA_DRIVE_R2_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                     |
+| `MOTIA_DRIVE_URL`                  | `string` | Required        | Base URL of central drive service (notified at `/webhook/uploads/status`). |
+| `MOTIA_CDN_HOST`                   | `string` | Required        | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs.    |
+| `MOTIA_CDN_R2_ENDPOINT`            | `string` | Required        | S3/R2 API endpoint for public CDN cache bucket.                            |
+| `MOTIA_CDN_R2_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                         |
+| `MOTIA_CDN_R2_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                |
+| `MOTIA_CDN_R2_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                            |
+| `MOTIA_CDN_R2_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                       |
+| `MOTIA_LIVEKIT_URL`                | `string` | Required        | LiveKit SFU server host URL (e.g. `livekit.example.com`).                  |
+| `MOTIA_LIVEKIT_API_KEY`            | `string` | Required        | LiveKit server API key.                                                    |
+| `MOTIA_LIVEKIT_API_SECRET`         | `string` | Required        | LiveKit server API secret.                                                 |
+| `STREAMS_PORT`                     | `number` | `3114`          | Local port for `StreamModule` internal streams adapter.                    |
+
+---
+
+## Development
+
+<details>
+<summary><strong>View Developer Commands & Scripts</strong></summary>
+
+All scripts are executed using `bun`:
+
+```bash
+# Start local development server with watch mode and III flow console
+bun run dev
+
+# Build production bundle with Motia
+bun run build
+
+# Start production server
+bun run start
+
+# Run ESLint with auto-fix across codebase
+bun run lint
+
+# Format codebase using Prettier
+bun run format
+
+# Run Gitleaks secret detection
+bun run detect
+
+# Clean compiled build artifacts and temporary Motia cache
+bun run clean
+
+# Build Docker image locally
+bun run docker:build
+
+# Run local Docker container using .env.prod
+bun run docker:start
+```
+
+### Git Commit Conventions
+
+This project enforces [Conventional Commits](https://www.conventionalcommits.org) using `@commitlint/cli` and `husky`:
+
+- `feat:` New features
+- `fix:` Bug fixes
+- `refactor:` Code improvements without behavioral changes
+- `chore:` Dependency and config updates
+- `ci(release):` Version bumps and releases
+
+</details>
+
+---
 
 ## License
 
 Published under the [MIT](https://github.com/Modest-Human-Brands/mmedia/blob/main/LICENSE) license.
-<br><br>
-<a href="https://github.com/Modest-Human-Brands/mmedia/graphs/contributors">
-<img src="https://contrib.rocks/image?repo=Modest-Human-Brands/mmedia" />
-</a>
+
+<br>
+
+<p align="center">
+  <a href="https://github.com/Modest-Human-Brands/mmedia/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=Modest-Human-Brands/mmedia" alt="Contributors" />
+  </a>
+</p>

@@ -7,8 +7,12 @@ export const config = {
   description: 'Intercepts Cloudflare R2 object creation notifications and dispatches tasks',
   flows: ['media-process-flow'],
   triggers: [
-    http('POST', 'webhook/media/uploads', {
+    http('POST', '/webhook/media/uploads', {
       bodySchema: z.object({ Records: z.array(z.object({ s3: z.any() })) }),
+      responseSchema: {
+        202: z.object({ success: z.boolean(), message: z.string() }),
+        400: z.object({ error: z.string() }),
+      },
     }),
   ],
   enqueues: ['media.process'],
