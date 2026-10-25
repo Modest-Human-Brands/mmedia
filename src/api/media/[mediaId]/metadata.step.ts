@@ -36,12 +36,13 @@ const mediaSchema = z.object({
 
 export const config = {
   name: 'MediaGet',
-  description: 'Get a single processed media item by id (filename without extension) with full EXIF/Metadata',
+  description: 'Get a single processed media item by id (filename without extension) with full EXIF/Metadata. Requires the x-org-id header',
   flows: ['media-get-flow'],
   triggers: [
     http('GET', '/media/:mediaId/metadata', {
       responseSchema: {
         200: mediaSchema,
+        400: z.object({ error: z.string() }),
         404: z.object({ error: z.string() }),
         500: z.object({ error: z.string() }),
       },
@@ -53,7 +54,13 @@ export const config = {
 export const handler: Handlers<typeof config> = async ({ request }) => {
   const { mediaId } = request.pathParams
 
-  logger.info('Fetching media', { mediaId })
+  const header = Object.entries(request.headers).find(([name]) => name.toLowerCase() === 'x-org-id')?.[1]
+  const orgId = Array.isArray(header) ? header[0] : header
+  if (!orgId || !/^[\w-]+$/.test(orgId)) {
+    return { status: 400, body: { error: 'x-org-id header required' } }
+  }
+
+  logger.info('Fetching media', { mediaId, orgId })
 
   let localPath: string | undefined
 
@@ -64,7 +71,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
         endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT!,
         bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET!,
       },
-      { prefix: 'processed/' }
+      { prefix: `processed/${orgId}/` }
     )
 
     // processed/<orgId>/<projectId>/<mediaId>.<ext>

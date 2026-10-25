@@ -3,5 +3,6 @@ description: ''
 variables:
   base_url: ''
   media_id: ''
+  org_id: ''
   slug: ''
   device_id: ''

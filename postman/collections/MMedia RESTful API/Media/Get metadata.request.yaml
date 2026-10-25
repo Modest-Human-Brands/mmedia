@@ -2,6 +2,8 @@ $kind: http-request
 description: Downloads the processed file from R2 and returns its technical metadata. `media_id` is the processed filename without extension.
 url: '{{base_url}}/media/{{media_id}}/metadata'
 method: GET
+headers:
+  x-org-id: '{{org_id}}'
 scripts:
   - type: afterResponse
     code: |-

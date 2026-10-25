@@ -2,6 +2,8 @@ $kind: http-request
 description: Unknown media id returns 404.
 url: '{{base_url}}/media/does-not-exist/metadata'
 method: GET
+headers:
+  x-org-id: '{{org_id}}'
 scripts:
   - type: afterResponse
     code: |-

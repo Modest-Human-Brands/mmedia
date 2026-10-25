@@ -201,13 +201,17 @@ curl -X GET http://localhost:3111/health
 
 #### `GET /media/:mediaId/metadata`
 
-Finds the processed file in the Drive bucket (`processed/<orgId>/<projectId>/<mediaId>.<ext>`), downloads it temporarily, and extracts technical metadata using `exifr` (images) or `ffprobe` (audio and video). Large files make this call slow.
+Finds the processed file in the Drive bucket under the caller's organization (`processed/<orgId>/<projectId>/<mediaId>.<ext>`), downloads it temporarily, and extracts technical metadata using `exifr` (images) or `ffprobe` (audio and video). Large files make this call slow.
 
 **Request:**
 
 ```bash
-curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata
+curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata \n  -H "x-org-id: org-1"
 ```
+
+**Headers:**
+
+- `x-org-id` (`string`, required): Organization id (letters, digits, `_` or `-`). Only files under `processed/<orgId>/` are searched.
 
 **Path Parameters:**
 
@@ -240,6 +244,7 @@ curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata
 
 **Error Responses:**
 
+- `400 Bad Request`: `{"error": "x-org-id header required"}`
 - `404 Not Found`: `{"error": "Media not found: <mediaId>"}`
 - `500 Internal Server Error`: `{"error": "Internal Server Error while extracting metadata"}`
 
