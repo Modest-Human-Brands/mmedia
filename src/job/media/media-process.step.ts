@@ -19,11 +19,11 @@ const fs = createStorage({
 
 const r2DriveStorage = createStorage({
   driver: s3Driver({
-    accessKeyId: process.env.MOTIA_DRIVE_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.MOTIA_DRIVE_R2_SECRET_ACCESS_KEY!,
-    endpoint: process.env.MOTIA_DRIVE_R2_ENDPOINT!,
-    bucket: process.env.MOTIA_DRIVE_R2_BUCKET!,
-    region: process.env.MOTIA_DRIVE_R2_REGION || 'auto',
+    accessKeyId: process.env.MOTIA_MMEDIA_DRIVE_R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.MOTIA_MMEDIA_DRIVE_R2_SECRET_ACCESS_KEY!,
+    endpoint: process.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
+    bucket: process.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
+    region: process.env.MOTIA_MMEDIA_DRIVE_R2_REGION || 'auto',
   }),
 })
 
@@ -73,8 +73,8 @@ export const handler: Handlers<typeof config> = async (input) => {
   const existingFiles = await r2GetAllFiles(
     r2Drive,
     {
-      endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT!,
-      bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET!,
+      endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
+      bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
     },
     { prefix: `processed/${orgId}/${projectId}/` }
   )
@@ -97,7 +97,7 @@ export const handler: Handlers<typeof config> = async (input) => {
   const storageSourceKey = `source/${mediaId}`
 
   try {
-    const { stream } = await r2GetFileStream(r2Drive, encodeURI(sourceKey), import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
+    const { stream } = await r2GetFileStream(r2Drive, encodeURI(sourceKey), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
 
     await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
 
@@ -106,7 +106,7 @@ export const handler: Handlers<typeof config> = async (input) => {
 
     // Webhook Notification: Phase 1 Complete (60%)
     await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_DRIVE_URL,
+      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
       method: 'PUT',
       body: {
         batchId,
@@ -125,14 +125,14 @@ export const handler: Handlers<typeof config> = async (input) => {
     const fileStream = Readable.toWeb(Readable.from(fileBuffer))
 
     await r2PutFileStream(r2Drive, destinationKey, fileStream, fileBuffer ? fileBuffer.byteLength : 0, {
-      endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT,
-      bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET,
+      endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT,
+      bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET,
     })
     await r2DriveStorage.del(sourceKey)
 
     // Webhook Notification: Phase 2 Complete (100%)
     await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_DRIVE_URL,
+      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
       method: 'PUT',
       body: {
         batchId,
@@ -151,7 +151,7 @@ export const handler: Handlers<typeof config> = async (input) => {
 
     // Notify status webhook about processing failure
     await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_DRIVE_URL,
+      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
       method: 'PUT',
       body: {
         batchId,

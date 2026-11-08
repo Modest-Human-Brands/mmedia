@@ -5,7 +5,7 @@ import { RoomServiceClient } from 'livekit-server-sdk'
 import getHlsUrl from 'src/utils/get-hls-url'
 import requireApiKey from 'src/utils/require-api-key'
 
-const roomService = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
+const roomService = new RoomServiceClient(process.env.LIVEKIT_URL!, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!)
 
 export const config = {
   name: 'StreamAllStatus',

@@ -18,15 +18,15 @@ import getHlsUrl from 'src/utils/get-hls-url'
 import getRoomName from 'src/utils/get-room-name'
 import requireApiKey from 'src/utils/require-api-key'
 
-const livekitUrl = process.env.MOTIA_LIVEKIT_URL
-const apiKey = process.env.MOTIA_LIVEKIT_API_KEY
-const apiSecret = process.env.MOTIA_LIVEKIT_API_SECRET
+const livekitUrl = process.env.LIVEKIT_URL || (import.meta.env.LIVEKIT_URL as string)
+const apiKey = process.env.LIVEKIT_API_KEY || (import.meta.env.LIVEKIT_API_KEY as string)
+const apiSecret = process.env.LIVEKIT_API_SECRET || (import.meta.env.LIVEKIT_API_SECRET as string)
 
-const r2Bucket = process.env.MOTIA_CDN_R2_BUCKET
-const r2Region = process.env.MOTIA_CDN_R2_REGION
-const r2Endpoint = process.env.MOTIA_CDN_R2_ENDPOINT
-const r2AccessKey = process.env.MOTIA_CDN_R2_ACCESS_KEY_ID
-const r2Secret = process.env.MOTIA_CDN_R2_SECRET_ACCESS_KEY
+const r2Bucket = process.env.MOTIA_MMEDIA_CDN_R2_BUCKET
+const r2Region = process.env.MOTIA_MMEDIA_CDN_R2_REGION
+const r2Endpoint = process.env.MOTIA_MMEDIA_CDN_R2_ENDPOINT
+const r2AccessKey = process.env.MOTIA_MMEDIA_CDN_R2_ACCESS_KEY_ID
+const r2Secret = process.env.MOTIA_MMEDIA_CDN_R2_SECRET_ACCESS_KEY
 
 const ingressClient = new IngressClient(livekitUrl, apiKey, apiSecret)
 const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
@@ -153,7 +153,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     })
 
     // ── 4. Upload master.m3u8 to S3 via aws4fetch ─────────────────────────────
-    const cdnBase = process.env.MOTIA_CDN_HOST
+    const cdnBase = process.env.MOTIA_MMEDIA_CDN_HOST
     const masterPlaylist = [
       '#EXTM3U',
       '#EXT-X-VERSION:3',

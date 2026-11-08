@@ -4,7 +4,7 @@ import { RoomServiceClient } from 'livekit-server-sdk'
 import getRoomName from 'src/utils/get-room-name'
 import requireApiKey from 'src/utils/require-api-key'
 
-const roomClient = new RoomServiceClient(import.meta.env.MOTIA_LIVEKIT_URL, import.meta.env.MOTIA_LIVEKIT_API_KEY, import.meta.env.MOTIA_LIVEKIT_API_SECRET)
+const roomClient = new RoomServiceClient(process.env.LIVEKIT_URL!, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!)
 
 export const config = {
   name: 'StreamStop',

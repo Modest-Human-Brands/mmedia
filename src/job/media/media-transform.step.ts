@@ -55,7 +55,7 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
     if (!(await fs.hasItem(storageSourceKey))) {
       logger.info(`[MediaTransformer] Downloading source from R2: ${mediaOriginId}`)
 
-      const { stream } = await r2GetFileStream(r2Drive, encodeURI(mediaOriginId), import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
+      const { stream } = await r2GetFileStream(r2Drive, encodeURI(mediaOriginId), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
 
       // Stream R2 content directly to local disk
       await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))

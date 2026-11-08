@@ -10,10 +10,10 @@ import { AwsClient } from 'aws4fetch'
 
 const r2CdnClientSingleton = () => {
   return new AwsClient({
-    accessKeyId: process.env.MOTIA_CDN_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.MOTIA_CDN_R2_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.MOTIA_MMEDIA_CDN_R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.MOTIA_MMEDIA_CDN_R2_SECRET_ACCESS_KEY!,
     service: 's3',
-    region: process.env.MOTIA_CDN_R2_REGION || 'auto',
+    region: process.env.MOTIA_MMEDIA_CDN_R2_REGION || 'auto',
   })
 }
 

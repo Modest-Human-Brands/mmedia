@@ -38,7 +38,7 @@ export const handler: Handlers<typeof config> = async ({ slug, projectSlug, reso
   const [slugKind, , assetIndexStr, versionIndexStr] = slug.split('-')
   const kind = slugKind === 'video' ? 'Video' : 'Photo'
   const [aW, aH] = aspectRatio.split(':').map(Number)
-  const coverURL = `${process.env.MOTIA_SITE_URL}/media/image/s_${coverWidth}x${coverHeight}/${slug}`
+  const coverURL = `${process.env.MOTIA_MMEDIA_SITE_URL}/media/image/s_${coverWidth}x${coverHeight}/${slug}`
 
   await notion.pages.create({
     parent: { database_id: notionDbId.asset },

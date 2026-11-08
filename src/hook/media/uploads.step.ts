@@ -58,7 +58,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
   try {
     // Notify the central state webhook that the file was caught and verification processing has begun
     await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_DRIVE_URL,
+      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
       method: 'PUT',
       body: {
         batchId,

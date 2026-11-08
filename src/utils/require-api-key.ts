@@ -2,7 +2,7 @@ import { logger, type ApiMiddleware } from 'motia'
 import { timingSafeEqual } from 'node:crypto'
 
 const requireApiKey: ApiMiddleware = async ({ request }, _ctx, next) => {
-  const expected = import.meta.env.MOTIA_API_KEY
+  const expected = import.meta.env.MOTIA_MMEDIA_API_KEY
   if (!expected) {
     logger.error('MOTIA_API_KEY is not configured; rejecting request')
     return { status: 401, body: { error: 'Unauthorized' } }

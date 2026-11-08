@@ -71,8 +71,8 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     const keys = await r2GetAllFiles(
       r2Drive,
       {
-        endpoint: import.meta.env.MOTIA_DRIVE_R2_ENDPOINT!,
-        bucket: import.meta.env.MOTIA_DRIVE_R2_BUCKET!,
+        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
+        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
       },
       { prefix: `processed/${orgId}/` }
     )
@@ -90,7 +90,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     localPath = `./static/metadata/${mediaId}${ext}`
 
     await ensureDir('./static/metadata')
-    const { stream } = await r2GetFileStream(r2Drive, encodeURI(key), import.meta.env.MOTIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_DRIVE_R2_BUCKET)
+    const { stream } = await r2GetFileStream(r2Drive, encodeURI(key), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
     await stream.pipeTo(Writable.toWeb(createWriteStream(localPath)))
 
     const { kind, format, stream: mediaStream } = await getMediaMetadata(localPath)
@@ -101,7 +101,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
         slug: mediaId,
         type: kind,
         title: mediaId,
-        thumbnailUrl: `${import.meta.env.MOTIA_SITE_URL}/media/image/s_${THUMBNAIL_SIZE}/${mediaId}`,
+        thumbnailUrl: `${import.meta.env.MOTIA_MMEDIA_SITE_URL}/media/image/s_${THUMBNAIL_SIZE}/${mediaId}`,
         metadata: {
           size: format.size,
           bitDepth: format.bitDepth,

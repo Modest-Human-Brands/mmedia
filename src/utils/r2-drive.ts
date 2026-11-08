@@ -10,10 +10,10 @@ import { AwsClient } from 'aws4fetch'
 
 const r2DriveClientSingleton = () => {
   return new AwsClient({
-    accessKeyId: process.env.MOTIA_DRIVE_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.MOTIA_DRIVE_R2_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.MOTIA_MMEDIA_DRIVE_R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.MOTIA_MMEDIA_DRIVE_R2_SECRET_ACCESS_KEY!,
     service: 's3',
-    region: process.env.MOTIA_DRIVE_R2_REGION || 'auto',
+    region: process.env.MOTIA_MMEDIA_DRIVE_R2_REGION || 'auto',
   })
 }
 

@@ -7,8 +7,8 @@ interface R2PutOptions {
 }
 
 const defaultOptions: R2PutOptions = {
-  endpoint: process.env.MOTIA_CDN_R2_ENDPOINT!,
-  bucket: process.env.MOTIA_CDN_R2_BUCKET!,
+  endpoint: process.env.MOTIA_MMEDIA_CDN_R2_ENDPOINT!,
+  bucket: process.env.MOTIA_MMEDIA_CDN_R2_BUCKET!,
 }
 
 export default async function (client: AwsClient, objectKey: string, webStream: ReadableStream, byteLength: number, { endpoint, bucket }: R2PutOptions = defaultOptions) {

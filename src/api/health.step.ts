@@ -28,8 +28,8 @@ export const handler: Handlers<typeof config> = async (_) => {
     status: 200,
     body: {
       status: 'OK',
-      version: import.meta.env.MOTIA_APP_VERSION,
-      buildTime: import.meta.env.MOTIA_APP_BUILD_TIME,
+      version: import.meta.env.MOTIA_MMEDIA_APP_VERSION,
+      buildTime: import.meta.env.MOTIA_MMEDIA_APP_BUILD_TIME,
       node,
     },
   }
