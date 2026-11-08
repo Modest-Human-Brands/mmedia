@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.10
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.9...v0.1.10)
+
+### 🚀 Enhancements
+
+- Update environment variables and refactor media processing logic for improved consistency ([c8912bc](https://github.com/Modest-Human-Brands/mmedia/commit/c8912bc))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.9
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.8...v0.1.9)
