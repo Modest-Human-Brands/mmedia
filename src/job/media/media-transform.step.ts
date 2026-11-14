@@ -11,8 +11,8 @@ import transcodeImage from 'src/utils/transcode-image'
 import transcodeVideo from 'src/utils/transcode-video'
 import ensureDir from 'src/utils/ensure-dir'
 import generateThumbnail from 'src/utils/generate-thumbnail'
-import r2GetFileStream from 'src/utils/r2-get-file-stream'
-import r2Drive from 'src/utils/r2-drive'
+import s3GetFileStream from 'src/utils/s3-get-file-stream'
+import s3Drive from 'src/utils/s3-drive'
 import { logEncoders } from 'src/utils/hw-encoders'
 
 const fs = createStorage({
@@ -57,11 +57,11 @@ export const handler: Handlers<typeof config> = async (input, { traceId }) => {
 
   try {
     if (!(await fs.hasItem(storageSourceKey))) {
-      logger.info(`[MediaTransformer] Downloading source from R2: ${mediaOriginId}`)
+      logger.info(`[MediaTransformer] Downloading source from storage: ${mediaOriginId}`)
 
-      const { stream } = await r2GetFileStream(r2Drive, encodeURI(mediaOriginId), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
+      const { stream } = await s3GetFileStream(s3Drive, encodeURI(mediaOriginId), import.meta.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET)
 
-      // Stream R2 content directly to local disk
+      // Stream storage content directly to local disk
       await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
     }
 

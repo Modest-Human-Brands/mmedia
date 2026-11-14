@@ -6,9 +6,9 @@ import { Writable } from 'node:stream'
 
 import ensureDir from 'src/utils/ensure-dir'
 import getMediaMetadata from 'src/utils/get-media-metadata'
-import r2Drive from 'src/utils/r2-drive'
-import r2GetAllFiles from 'src/utils/r2-get-all-files'
-import r2GetFileStream from 'src/utils/r2-get-file-stream'
+import s3Drive from 'src/utils/s3-drive'
+import s3GetAllFiles from 'src/utils/s3-get-all-files'
+import s3GetFileStream from 'src/utils/s3-get-file-stream'
 import requireApiKey from 'src/utils/require-api-key'
 
 const THUMBNAIL_SIZE = '400x400'
@@ -68,11 +68,11 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
   let localPath: string | undefined
 
   try {
-    const keys = await r2GetAllFiles(
-      r2Drive,
+    const keys = await s3GetAllFiles(
+      s3Drive,
       {
-        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
-        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
+        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT!,
+        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET!,
       },
       { prefix: `processed/${orgId}/` }
     )
@@ -90,7 +90,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     localPath = `./static/metadata/${mediaId}${ext}`
 
     await ensureDir('./static/metadata')
-    const { stream } = await r2GetFileStream(r2Drive, encodeURI(key), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
+    const { stream } = await s3GetFileStream(s3Drive, encodeURI(key), import.meta.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET)
     await stream.pipeTo(Writable.toWeb(createWriteStream(localPath)))
 
     const { kind, format, stream: mediaStream } = await getMediaMetadata(localPath)

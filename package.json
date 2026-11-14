@@ -22,6 +22,7 @@
     "detect": "gitleaks git --verbose",
     "lint": "eslint . --fix",
     "format": "prettier . --write",
+    "test:e2e": "bun test/e2e/run.ts",
     "build": "motia build",
     "start": "motia start",
     "clean": "rm -rf .motia dist",
@@ -40,6 +41,9 @@
     "ofetch": "^1.5.1",
     "unstorage": "^1.17.6",
     "zod": "^4.6.7"
+  },
+  "overrides": {
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",

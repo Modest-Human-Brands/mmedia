@@ -29,7 +29,7 @@
 
 ## Overview
 
-**mmedia** is a containerized, event-driven media processing and streaming microservice. It provides automated cloud storage ingestion (Cloudflare R2 / AWS S3), on-demand image optimization and video thumbnailing via IPX and Sharp, hardware-accelerated multi-codec DASH transcoding via FFmpeg, and scalable WebRTC-to-HLS live broadcasting powered by LiveKit SFU.
+**mmedia** is a containerized, event-driven media processing and streaming microservice. It provides automated cloud storage ingestion (any S3-compatible storage), on-demand image optimization and video thumbnailing via IPX and Sharp, hardware-accelerated multi-codec DASH transcoding via FFmpeg, and scalable WebRTC-to-HLS live broadcasting powered by LiveKit SFU.
 
 Built on the **Motia** step-orchestration framework and the **III** distributed engine, mmedia pairs persistent state storage and background worker queues with built-in OpenTelemetry instrumentation and health diagnostics.
 
@@ -39,7 +39,7 @@ Built on the **Motia** step-orchestration framework and the **III** distributed 
 - 📡 **WebRTC & LiveKit Live Ingestion**: Single-call orchestration for WHIP WebRTC ingress, real-time multi-bitrate HLS egress (1080p, 720p, 480p), automated master playlist (`master.m3u8`) assembly, and raw MP4 cloud archival.
 - 🖼️ **On-the-Fly Image Optimization**: Fast image transformations (resizing, format conversion to WebP/AVIF, quality tuning) powered by IPX, with automatic frame extraction for video assets.
 - ⚡ **Event-Driven Task Orchestration**: Reactive step execution with background queue processing (`media.process`, `media.transform`), concurrency controls, automatic retry policies, and state tracking.
-- ☁️ **Cloud Native S3/R2 Streaming**: Direct stream-based uploads and downloads via `aws4fetch` and `unstorage`, integrated with Cloudflare Worker edge webhook forwarding.
+- ☁️ **Cloud Native S3 Streaming**: Direct stream-based uploads and downloads via `aws4fetch` and `unstorage`, with an optional Cloudflare Worker webhook adapter.
 - 🔍 **Deep Media Metadata & EXIF**: Automated technical format extraction (resolution, aspect ratio, codecs, bit depth, camera make/model, lens, GPS coordinates) via `exifr`, `image-meta`, and `ffprobe`.
 
 ---
@@ -73,7 +73,7 @@ flowchart TD
 
     subgraph External ["Cloud Infrastructure"]
         LiveKitSFU["LiveKit SFU (WHIP / Egress Workers)"]
-        R2Storage[("Cloudflare R2 / AWS S3 (Drive & CDN)")]
+        Storage[("S3-compatible storage (Drive & CDN)")]
         DriveWebhook["Central Drive Status Webhook"]
     end
 
@@ -81,13 +81,13 @@ flowchart TD
     Client -->|Metadata Query| Metadata
     Client -->|Transcode Request| TransformAPI
     Client -->|WHIP WebRTC Ingest| LiveKitSFU
-    Client -->|HLS Stream Consumption| R2Storage
+    Client -->|HLS Stream Consumption| Storage
 
     Webhook -->|Queue Task| QProcess
     TransformAPI -->|Queue & Poll| QTransform
     TransformAPI <-->|State Polling (30s)| StateStore
 
-    QProcess -->|Extract Metadata & Standardize| R2Storage
+    QProcess -->|Extract Metadata & Standardize| Storage
     QProcess -->|Progress Reports| DriveWebhook
 
     QTransform -->|Process Image| IPX
@@ -95,7 +95,7 @@ flowchart TD
     QTransform -->|Update Result| StateStore
 
     StreamAPI -->|Manage Rooms & Ingress/Egress| LiveKitSFU
-    LiveKitSFU -->|Egress MP4 & HLS Chunks| R2Storage
+    LiveKitSFU -->|Egress MP4 & HLS Chunks| Storage
 ```
 
 ---
@@ -107,7 +107,7 @@ flowchart TD
 - [Bun](https://bun.sh) (`^1.2.9` or higher, repo pinned to `1.4.2`) or [Node.js](https://nodejs.org) (`^22.11.0 || ^24.14.0`)
 - [FFmpeg](https://ffmpeg.org) and `ffprobe` installed and present in your system `PATH`
 - [III Engine](https://install.iii.dev) CLI binary installed
-- Cloudflare R2 or AWS S3 credentials (and LiveKit server credentials for streaming)
+- S3-compatible storage credentials (R2, AWS S3, MinIO...) (and LiveKit server credentials for streaming)
 
 ### Running with Docker
 
@@ -182,7 +182,7 @@ The REST API runs on port `3111` by default (configurable via `iii-config.yaml`)
 | `GET`  | `/health`                  | `HealthCheck`      | Health and node verification                                         |
 | `GET`  | `/media/:mediaId/metadata` | `MediaGet`         | Retrieve technical EXIF/ffprobe metadata for a processed asset       |
 | `POST` | `/media/transform`         | `MediaTransformer` | On-demand image/video transformation with synchronous wait           |
-| `POST` | `/webhook/media/uploads`   | `WebhookHandler`   | Bucket upload notification receiver (R2/S3)                          |
+| `POST` | `/webhook/media/uploads`   | `WebhookHandler`   | Bucket upload notification receiver (S3)                             |
 | `GET`  | `/stream`                  | `StreamAllStatus`  | List all active LiveKit broadcast rooms and statuses                 |
 | `GET`  | `/stream/:slug/:deviceId`  | `StreamStatus`     | Query status and playback URLs for a specific stream                 |
 | `POST` | `/stream/start`            | `StreamStart`      | Provision WHIP ingress, multi-quality HLS egress, and raw MP4 egress |
@@ -339,9 +339,9 @@ For `transform:video`, DASH output is written to `./static/<cacheKey>/` and the 
 
 #### `POST /webhook/media/uploads`
 
-Receives S3/R2 bucket object-creation event notifications for keys shaped `upload/<orgSlug>/<projectKey>/<name>.<ext>`. MDrive owns `<name>` and MMedia never renames it. The handler notifies MDrive (`PUT /webhook/uploads/status` with `x-api-key: $MOTIA_MMEDIA_DRIVE_API_KEY`) that processing started and queues a `media.process` job, which copies the file to `processed/<orgSlug>/<projectKey>/<name>.<ext>`, reports 60% with extracted metadata and 100% when done, then deletes the upload copy.
+Receives S3 bucket object-creation event notifications for keys shaped `upload/<orgSlug>/<projectKey>/<name>.<ext>`. MDrive owns `<name>` and MMedia never renames it. The handler notifies MDrive (`PUT /webhook/uploads/status` with `x-api-key: $MOTIA_MMEDIA_DRIVE_API_KEY`) that processing started and queues a `media.process` job, which copies the file to `processed/<orgSlug>/<projectKey>/<name>.<ext>`, reports 60% with extracted metadata and 100% when done, then deletes the upload copy.
 
-Keys outside `upload/` (for example MMedia's own `processed/` writes) return `202` with `ignored: true` and are not queued. Limit the R2 event notification rule to the `upload/` prefix and object-create events.
+Keys outside `upload/` (for example MMedia's own `processed/` writes) return `202` with `ignored: true` and are not queued. Limit the bucket event notification rule to the `upload/` prefix and object-create events.
 
 **Request:**
 
@@ -375,8 +375,10 @@ curl -X POST http://localhost:3111/webhook/media/uploads \
 
 Ignored key: `{"success": true, "ignored": true, "message": "Ignored: not an upload key"}`. Malformed key: `400 {"error": "Key must be upload/<orgSlug>/<projectKey>/<name>.<ext>"}`.
 
-**Edge Integration (Cloudflare Workers):**
-`worker/r2-event.js` provides an out-of-the-box Cloudflare Queue consumer to forward R2 notifications to this endpoint:
+**Event sources:** the endpoint accepts any S3-style `Records` event (MinIO, AWS S3 notifications, or your own forwarder). The Cloudflare adapter below is optional.
+
+**Cloudflare adapter (optional):**
+`deploy/cloudflare/queue-consumer.js` is a Cloudflare Queue consumer that forwards R2 notifications to this endpoint:
 
 ```javascript
 export default {
@@ -412,9 +414,9 @@ mmedia integrates directly with LiveKit SFU (`livekit-server-sdk`) to handle Web
 Initiates an end-to-end streaming session for a given stream slug and device:
 
 1. Creates a LiveKit WHIP Ingress (`IngressInput.WHIP_INPUT`).
-2. Starts composite raw MP4 recording egress directly to S3/R2 (`recordings/<slug>/<deviceId>/raw_<timestamp>.mp4`).
+2. Starts composite raw MP4 recording egress directly to S3 (`recordings/<slug>/<deviceId>/raw_<timestamp>.mp4`).
 3. Starts 3 parallel room composite HLS egresses (480p, 720p, 1080p) sliced into 4-second segments.
-4. Generates a multi-bitrate HLS master playlist (`master.m3u8`) and uploads it to S3/R2 with `Cache-Control: no-cache`.
+4. Generates a multi-bitrate HLS master playlist (`master.m3u8`) and uploads it to S3 with `Cache-Control: no-cache`.
 
 **Request:**
 
@@ -545,17 +547,17 @@ curl -X POST http://localhost:3111/stream/stop \
 
 Motia orchestrates asynchronous jobs across dedicated worker queues configured in `src/job/`:
 
-| Topic / Flow      | Concurrency | Retries | Step               | Description                                                                                                                                                                         |
-| ----------------- | ----------- | ------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `media.process`   | `1`         | `3`     | `MediaProcessor`   | Downloads uploaded file from R2, extracts metadata, standardizes asset filename, uploads to `processed/` path, cleans up temporary source, and sends progress webhooks (60%, 100%). |
-| `media.transform` | `2`         | `3`     | `MediaTransformer` | Executes IPX image resizing/conversion or FFmpeg DASH transcoding, saves output to disk cache, and updates `stateManager` (`media.result`).                                         |
-| `stream.stopped`  | `1`         | `0`     | Event Consumer     | Emitted upon room termination for downstream cleanup.                                                                                                                               |
+| Topic / Flow      | Concurrency | Retries | Step               | Description                                                                                                                                                                              |
+| ----------------- | ----------- | ------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.process`   | `1`         | `3`     | `MediaProcessor`   | Downloads uploaded file from storage, extracts metadata, standardizes asset filename, uploads to `processed/` path, cleans up temporary source, and sends progress webhooks (60%, 100%). |
+| `media.transform` | `2`         | `3`     | `MediaTransformer` | Executes IPX image resizing/conversion or FFmpeg DASH transcoding, saves output to disk cache, and updates `stateManager` (`media.result`).                                              |
+| `stream.stopped`  | `1`         | `0`     | Event Consumer     | Emitted upon room termination for downstream cleanup.                                                                                                                                    |
 
 ---
 
 ## Configuration Reference
 
-The service is configured via environment variables (loaded through `.env` in development or Docker environment injection in production):
+The service is configured via environment variables (loaded through `.env` in development or Docker environment injection in production). Storage is any S3-compatible service (Cloudflare R2, AWS S3, MinIO, ...); the `*_S3_*` names replaced the earlier `*_R2_*` names (`MOTIA_MMEDIA_DRIVE_R2_ENDPOINT` is now `MOTIA_MMEDIA_DRIVE_S3_ENDPOINT`, and so on for `BUCKET`, `REGION`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY` and the `CDN` group). Use `region` `us-east-1` for servers that reject `auto`.
 
 | Variable                                  | Type     | Default         | Description                                                                                                                          |
 | ----------------------------------------- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -568,16 +570,16 @@ The service is configured via environment variables (loaded through `.env` in de
 | `MOTIA_MMEDIA_DRIVE_URL`                  | `string` | Required        | Base URL of the MDrive service (notified at `/webhook/uploads/status`).                                                              |
 | `MOTIA_MMEDIA_SITE_URL`                   | `string` | Required        | Public site URL used to build `thumbnailUrl` in the metadata response.                                                               |
 | `MOTIA_MMEDIA_CDN_HOST`                   | `string` | Required        | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs.                                                              |
-| `MOTIA_MMEDIA_DRIVE_R2_ENDPOINT`          | `string` | Required        | Cloudflare R2 / S3 API endpoint for the drive storage bucket.                                                                        |
-| `MOTIA_MMEDIA_DRIVE_R2_BUCKET`            | `string` | Required        | Bucket name containing uploads (`upload/`) and processed assets (`processed/`).                                                      |
-| `MOTIA_MMEDIA_DRIVE_R2_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                                                                                        |
-| `MOTIA_MMEDIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                                                                                    |
-| `MOTIA_MMEDIA_DRIVE_R2_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                                                                               |
-| `MOTIA_MMEDIA_CDN_R2_ENDPOINT`            | `string` | Required        | S3/R2 API endpoint for the public CDN cache bucket.                                                                                  |
-| `MOTIA_MMEDIA_CDN_R2_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                                                                                   |
-| `MOTIA_MMEDIA_CDN_R2_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                                                                          |
-| `MOTIA_MMEDIA_CDN_R2_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                                                                                      |
-| `MOTIA_MMEDIA_CDN_R2_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                                                                                 |
+| `MOTIA_MMEDIA_DRIVE_S3_ENDPOINT`          | `string` | Required        | S3 API endpoint for the drive storage bucket.                                                                                        |
+| `MOTIA_MMEDIA_DRIVE_S3_BUCKET`            | `string` | Required        | Bucket name containing uploads (`upload/`) and processed assets (`processed/`).                                                      |
+| `MOTIA_MMEDIA_DRIVE_S3_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                                                                                        |
+| `MOTIA_MMEDIA_DRIVE_S3_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                                                                                    |
+| `MOTIA_MMEDIA_DRIVE_S3_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                                                                               |
+| `MOTIA_MMEDIA_CDN_S3_ENDPOINT`            | `string` | Required        | S3 API endpoint for the public CDN cache bucket.                                                                                     |
+| `MOTIA_MMEDIA_CDN_S3_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                                                                                   |
+| `MOTIA_MMEDIA_CDN_S3_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                                                                          |
+| `MOTIA_MMEDIA_CDN_S3_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                                                                                      |
+| `MOTIA_MMEDIA_CDN_S3_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                                                                                 |
 | `LIVEKIT_URL`                             | `string` | Required        | LiveKit SFU server URL including scheme (e.g. `https://livekit.example.com`). Shared, unprefixed.                                    |
 | `LIVEKIT_API_KEY`                         | `string` | Required        | LiveKit server API key. Shared, unprefixed.                                                                                          |
 | `LIVEKIT_API_SECRET`                      | `string` | Required        | LiveKit server API secret. Shared, unprefixed.                                                                                       |
@@ -590,19 +592,19 @@ The service is configured via environment variables (loaded through `.env` in de
 | `HOSTNAME` | `string` | System hostname | Host node identifier reported by `/health`. |
 | `MOTIA_APP_VERSION` | `string` | None | App version injected into `/health` response. |
 | `MOTIA_APP_BUILD_TIME` | `string` | None | Build timestamp injected into `/health` response. |
-| `MOTIA_DRIVE_R2_ENDPOINT` | `string` | Required | Cloudflare R2 / S3 API endpoint for the drive storage bucket. |
-| `MOTIA_DRIVE_R2_BUCKET` | `string` | Required | Bucket name containing incoming uploads and drive assets. |
-| `MOTIA_DRIVE_R2_ACCESS_KEY_ID` | `string` | Required | S3 access key ID for drive bucket operations. |
-| `MOTIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required | S3 secret access key for drive bucket operations. |
-| `MOTIA_DRIVE_R2_REGION` | `string` | `"auto"` | S3 region for drive bucket operations. |
+| `MOTIA_DRIVE_S3_ENDPOINT` | `string` | Required | S3 API endpoint for the drive storage bucket. |
+| `MOTIA_DRIVE_S3_BUCKET` | `string` | Required | Bucket name containing incoming uploads and drive assets. |
+| `MOTIA_DRIVE_S3_ACCESS_KEY_ID` | `string` | Required | S3 access key ID for drive bucket operations. |
+| `MOTIA_DRIVE_S3_SECRET_ACCESS_KEY` | `string` | Required | S3 secret access key for drive bucket operations. |
+| `MOTIA_DRIVE_S3_REGION` | `string` | `"auto"` | S3 region for drive bucket operations. |
 | `MOTIA_API_KEY` | `string` | Required | Shared secret expected in the `x-api-key` request header. |
 | `MOTIA_DRIVE_URL` | `string` | Required | Base URL of central drive service (notified at `/webhook/uploads/status`). |
 | `MOTIA_CDN_HOST` | `string` | Required | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs. |
-| `MOTIA_CDN_R2_ENDPOINT` | `string` | Required | S3/R2 API endpoint for public CDN cache bucket. |
-| `MOTIA_CDN_R2_BUCKET` | `string` | Required | Bucket name for CDN cache and live stream outputs. |
-| `MOTIA_CDN_R2_ACCESS_KEY_ID` | `string` | Required | S3 access key ID for CDN bucket operations. |
-| `MOTIA_CDN_R2_SECRET_ACCESS_KEY` | `string` | Required | S3 secret access key for CDN bucket operations. |
-| `MOTIA_CDN_R2_REGION` | `string` | `"auto"` | S3 region for CDN bucket operations. |
+| `MOTIA_CDN_S3_ENDPOINT` | `string` | Required | S3 API endpoint for public CDN cache bucket. |
+| `MOTIA_CDN_S3_BUCKET` | `string` | Required | Bucket name for CDN cache and live stream outputs. |
+| `MOTIA_CDN_S3_ACCESS_KEY_ID` | `string` | Required | S3 access key ID for CDN bucket operations. |
+| `MOTIA_CDN_S3_SECRET_ACCESS_KEY` | `string` | Required | S3 secret access key for CDN bucket operations. |
+| `MOTIA_CDN_S3_REGION` | `string` | `"auto"` | S3 region for CDN bucket operations. |
 | `MOTIA_LIVEKIT_URL` | `string` | Required | LiveKit SFU server URL including scheme (e.g. `https://livekit.example.com`). |
 | `MOTIA_LIVEKIT_API_KEY` | `string` | Required | LiveKit server API key. |
 | `MOTIA_LIVEKIT_API_SECRET` | `string` | Required | LiveKit server API secret. |
@@ -645,6 +647,10 @@ bun run docker:build
 # Run local Docker container using .env.prod
 bun run docker:start
 ```
+
+### End-to-end test (fully local)
+
+`bun run test:e2e` starts an S3 mock, an MDrive stub and the real mmedia image from `test/e2e/docker-compose.yml`, then uploads synthetic files and checks the whole upload, metadata and transform path (auth, callbacks, `processed/` copy, idempotency, cleanup). No cloud service is contacted. Needs Docker. Set `E2E_KEEP=1` to leave the stack running afterwards.
 
 ### Git Commit Conventions
 

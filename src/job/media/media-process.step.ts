@@ -9,22 +9,22 @@ import { createWriteStream } from 'node:fs'
 import ensureDir from 'src/utils/ensure-dir'
 import getMediaMetadata from 'src/utils/get-media-metadata'
 import notifyDrive from 'src/utils/notify-drive'
-import r2Drive from 'src/utils/r2-drive'
-import r2GetAllFiles from 'src/utils/r2-get-all-files'
-import r2GetFileStream from 'src/utils/r2-get-file-stream'
-import r2PutFileStream from 'src/utils/r2-put-file-stream'
+import s3Drive from 'src/utils/s3-drive'
+import s3GetAllFiles from 'src/utils/s3-get-all-files'
+import s3GetFileStream from 'src/utils/s3-get-file-stream'
+import s3PutFileStream from 'src/utils/s3-put-file-stream'
 
 const fs = createStorage({
   driver: fsDriver({ base: './static' }),
 })
 
-const r2DriveStorage = createStorage({
+const s3DriveStorage = createStorage({
   driver: s3Driver({
-    accessKeyId: process.env.MOTIA_MMEDIA_DRIVE_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.MOTIA_MMEDIA_DRIVE_R2_SECRET_ACCESS_KEY!,
-    endpoint: process.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
-    bucket: process.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
-    region: process.env.MOTIA_MMEDIA_DRIVE_R2_REGION || 'auto',
+    accessKeyId: process.env.MOTIA_MMEDIA_DRIVE_S3_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.MOTIA_MMEDIA_DRIVE_S3_SECRET_ACCESS_KEY!,
+    endpoint: process.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT!,
+    bucket: process.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET!,
+    region: process.env.MOTIA_MMEDIA_DRIVE_S3_REGION || 'auto',
   }),
 })
 
@@ -52,13 +52,13 @@ export const handler: Handlers<typeof config> = async (input) => {
   // MDrive owns the file name; the processed object keeps it unchanged
   const destinationKey = `processed/${orgId}/${projectId}/${filename}`
 
-  // Retries and duplicate R2 events: skip the copy if a previous run already wrote the processed file
+  // Retries and duplicate storage events: skip the copy if a previous run already wrote the processed file
   const processedExists = (
-    await r2GetAllFiles(
-      r2Drive,
+    await s3GetAllFiles(
+      s3Drive,
       {
-        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
-        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
+        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT!,
+        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET!,
       },
       { prefix: destinationKey }
     )
@@ -72,7 +72,7 @@ export const handler: Handlers<typeof config> = async (input) => {
   try {
     await ensureDir('./static/source')
 
-    const { stream } = await r2GetFileStream(r2Drive, encodeURI(readKey), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
+    const { stream } = await s3GetFileStream(s3Drive, encodeURI(readKey), import.meta.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET)
 
     await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
 
@@ -86,9 +86,9 @@ export const handler: Handlers<typeof config> = async (input) => {
       const fileBuffer = await fs.getItemRaw(storageSourceKey)
       const fileStream = Readable.toWeb(Readable.from(fileBuffer))
 
-      await r2PutFileStream(r2Drive, destinationKey, fileStream, fileBuffer ? fileBuffer.byteLength : 0, {
-        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT,
-        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET,
+      await s3PutFileStream(s3Drive, destinationKey, fileStream, fileBuffer ? fileBuffer.byteLength : 0, {
+        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_S3_ENDPOINT,
+        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_S3_BUCKET,
       })
     }
 
@@ -96,7 +96,7 @@ export const handler: Handlers<typeof config> = async (input) => {
     await notifyDrive({ filename, projectId, status: 'completed', progressPercent: 100, error: null, data: null })
 
     // Remove the upload copy only after the callback succeeded, so a failed callback never leaves a processed file with no record
-    await r2DriveStorage.del(sourceKey).catch((error_) => {
+    await s3DriveStorage.del(sourceKey).catch((error_) => {
       logger.error('Failed to delete upload copy after processing', { sourceKey, error: error_.message })
     })
   } catch (error: any) {

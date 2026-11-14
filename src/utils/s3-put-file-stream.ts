@@ -1,17 +1,17 @@
 import type { AwsClient } from 'aws4fetch'
 import mimeTypes from 'mime-types'
 
-interface R2PutOptions {
+interface S3PutOptions {
   endpoint: string
   bucket: string
 }
 
-const defaultOptions: R2PutOptions = {
-  endpoint: process.env.MOTIA_MMEDIA_CDN_R2_ENDPOINT!,
-  bucket: process.env.MOTIA_MMEDIA_CDN_R2_BUCKET!,
+const defaultOptions: S3PutOptions = {
+  endpoint: process.env.MOTIA_MMEDIA_CDN_S3_ENDPOINT!,
+  bucket: process.env.MOTIA_MMEDIA_CDN_S3_BUCKET!,
 }
 
-export default async function (client: AwsClient, objectKey: string, webStream: ReadableStream, byteLength: number, { endpoint, bucket }: R2PutOptions = defaultOptions) {
+export default async function (client: AwsClient, objectKey: string, webStream: ReadableStream, byteLength: number, { endpoint, bucket }: S3PutOptions = defaultOptions) {
   const url = `${endpoint}/${bucket}/${objectKey}`
 
   let res: Response

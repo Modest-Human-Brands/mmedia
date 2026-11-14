@@ -1,6 +1,6 @@
 import type { AwsClient } from 'aws4fetch'
 
-export default async function (client: AwsClient, objectKey: string, endpoint = process.env.MOTIA_MMEDIA_CDN_R2_ENDPOINT!, bucket = process.env.MOTIA_MMEDIA_CDN_R2_BUCKET!) {
+export default async function (client: AwsClient, objectKey: string, endpoint = process.env.MOTIA_MMEDIA_CDN_S3_ENDPOINT!, bucket = process.env.MOTIA_MMEDIA_CDN_S3_BUCKET!) {
   const url = `${endpoint}/${bucket}/${objectKey}`
 
   const res = await client.fetch(url, { method: 'GET' })

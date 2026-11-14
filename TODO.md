@@ -4,7 +4,7 @@
 - [x] Service health diagnostics endpoint (`GET /health`)
 - [x] Media technical metadata extraction via exifr and ffprobe (`GET /media/:mediaId/metadata`)
 - [x] Synchronous on-demand image/video transformation (`POST /media/transform`)
-- [x] Cloudflare R2 / S3 storage upload webhook ingestion (`POST /webhook/media/uploads`)
+- [x] S3-compatible (R2, AWS S3, MinIO) storage upload webhook ingestion (`POST /webhook/media/uploads`)
 - [x] Background media processing and image transcoding worker pipeline
 - [x] Background video transcoding with dimension and aspect ratio calculation
 - [x] LiveKit live broadcast room start with WHIP and HLS egress (`POST /stream/start`)

@@ -22,31 +22,31 @@ const livekitUrl = process.env.LIVEKIT_URL || (import.meta.env.LIVEKIT_URL as st
 const apiKey = process.env.LIVEKIT_API_KEY || (import.meta.env.LIVEKIT_API_KEY as string)
 const apiSecret = process.env.LIVEKIT_API_SECRET || (import.meta.env.LIVEKIT_API_SECRET as string)
 
-const r2Bucket = process.env.MOTIA_MMEDIA_CDN_R2_BUCKET
-const r2Region = process.env.MOTIA_MMEDIA_CDN_R2_REGION
-const r2Endpoint = process.env.MOTIA_MMEDIA_CDN_R2_ENDPOINT
-const r2AccessKey = process.env.MOTIA_MMEDIA_CDN_R2_ACCESS_KEY_ID
-const r2Secret = process.env.MOTIA_MMEDIA_CDN_R2_SECRET_ACCESS_KEY
+const s3Bucket = process.env.MOTIA_MMEDIA_CDN_S3_BUCKET
+const s3Region = process.env.MOTIA_MMEDIA_CDN_S3_REGION
+const s3Endpoint = process.env.MOTIA_MMEDIA_CDN_S3_ENDPOINT
+const s3AccessKey = process.env.MOTIA_MMEDIA_CDN_S3_ACCESS_KEY_ID
+const s3Secret = process.env.MOTIA_MMEDIA_CDN_S3_SECRET_ACCESS_KEY
 
 const ingressClient = new IngressClient(livekitUrl, apiKey, apiSecret)
 const egressClient = new EgressClient(livekitUrl, apiKey, apiSecret)
 
 // aws4fetch client — used only for manual S3 uploads (master.m3u8)
 const aws = new AwsClient({
-  accessKeyId: r2AccessKey,
-  secretAccessKey: r2Secret,
-  region: r2Region,
+  accessKeyId: s3AccessKey!,
+  secretAccessKey: s3Secret!,
+  region: s3Region,
   service: 's3',
 })
 
 // Reused across all LiveKit egress outputs
 function makeS3Upload(): S3Upload {
   return new S3Upload({
-    accessKey: r2AccessKey,
-    secret: r2Secret,
-    bucket: r2Bucket,
-    region: r2Region,
-    endpoint: r2Endpoint,
+    accessKey: s3AccessKey,
+    secret: s3Secret,
+    bucket: s3Bucket,
+    region: s3Region,
+    endpoint: s3Endpoint,
     forcePathStyle: true,
   })
 }
@@ -162,7 +162,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
     ].join('\n')
 
     const masterKey = `live/${slug}/${deviceId}/hls/master.m3u8`
-    const masterUpload = aws.fetch(`${r2Endpoint}/${r2Bucket}/${masterKey}`, {
+    const masterUpload = aws.fetch(`${s3Endpoint}/${s3Bucket}/${masterKey}`, {
       method: 'PUT',
       body: masterPlaylist,
       headers: {
@@ -179,11 +179,11 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
 
     const hlsResults = hlsAndMaster.slice(0, HLS_QUALITIES.length)
 
-    logger.info(`Raw MP4 egress started: ${rawResult.egressId} → r2://${r2Bucket}/${rawMp4Key}`)
+    logger.info(`Raw MP4 egress started: ${rawResult.egressId} → s3://${s3Bucket}/${rawMp4Key}`)
     for (const [i, r] of hlsResults.entries()) {
       logger.info(`HLS ${HLS_QUALITIES[i]!.label} egress started: ${(r as Awaited<ReturnType<typeof egressClient.startRoomCompositeEgress>>).egressId}`)
     }
-    logger.info(`master.m3u8 uploaded → r2://${r2Bucket}/${masterKey}`)
+    logger.info(`master.m3u8 uploaded → s3://${s3Bucket}/${masterKey}`)
 
     return {
       status: 200,

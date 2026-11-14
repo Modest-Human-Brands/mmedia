@@ -5,7 +5,7 @@ import requireApiKey from 'src/utils/require-api-key'
 
 export const config = {
   name: 'WebhookHandler',
-  description: 'Intercepts Cloudflare R2 object creation notifications and dispatches tasks',
+  description: 'Intercepts S3-compatible object-created notifications and dispatches tasks',
   flows: ['media-process-flow'],
   triggers: [
     http('POST', '/webhook/media/uploads', {
@@ -38,7 +38,7 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
 
   const record = body?.Records?.[0]
   if (!record) {
-    return { status: 400, body: { error: 'Invalid or missing S3/R2 Records payload' } }
+    return { status: 400, body: { error: 'Invalid or missing S3-style Records payload' } }
   }
 
   const bucketName = record.s3.bucket.name

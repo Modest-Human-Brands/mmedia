@@ -20,19 +20,19 @@ interface ImportMetaEnv {
   readonly MOTIA_MMEDIA_DRIVE_URL: string
   readonly MOTIA_MMEDIA_CDN_HOST: string
 
-  // R2 drive (origin media)
-  readonly MOTIA_MMEDIA_DRIVE_R2_ENDPOINT: string
-  readonly MOTIA_MMEDIA_DRIVE_R2_BUCKET: string
-  readonly MOTIA_MMEDIA_DRIVE_R2_REGION: string
-  readonly MOTIA_MMEDIA_DRIVE_R2_ACCESS_KEY_ID: string
-  readonly MOTIA_MMEDIA_DRIVE_R2_SECRET_ACCESS_KEY: string
+  // S3 drive (origin media)
+  readonly MOTIA_MMEDIA_DRIVE_S3_ENDPOINT: string
+  readonly MOTIA_MMEDIA_DRIVE_S3_BUCKET: string
+  readonly MOTIA_MMEDIA_DRIVE_S3_REGION: string
+  readonly MOTIA_MMEDIA_DRIVE_S3_ACCESS_KEY_ID: string
+  readonly MOTIA_MMEDIA_DRIVE_S3_SECRET_ACCESS_KEY: string
 
-  // R2 CDN (transformed media and live streams)
-  readonly MOTIA_MMEDIA_CDN_R2_ENDPOINT: string
-  readonly MOTIA_MMEDIA_CDN_R2_BUCKET: string
-  readonly MOTIA_MMEDIA_CDN_R2_REGION: string
-  readonly MOTIA_MMEDIA_CDN_R2_ACCESS_KEY_ID: string
-  readonly MOTIA_MMEDIA_CDN_R2_SECRET_ACCESS_KEY: string
+  // S3 CDN (transformed media and live streams)
+  readonly MOTIA_MMEDIA_CDN_S3_ENDPOINT: string
+  readonly MOTIA_MMEDIA_CDN_S3_BUCKET: string
+  readonly MOTIA_MMEDIA_CDN_S3_REGION: string
+  readonly MOTIA_MMEDIA_CDN_S3_ACCESS_KEY_ID: string
+  readonly MOTIA_MMEDIA_CDN_S3_SECRET_ACCESS_KEY: string
 }
 
 interface ImportMeta {
