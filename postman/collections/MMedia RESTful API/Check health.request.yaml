@@ -1,5 +1,5 @@
 $kind: http-request
-description: Returns service status, version, build time and node name.
+description: Returns service status, version, build time, node name and the hardware encoders this node can use.
 url: '{{base_url}}/health'
 method: GET
 scripts:
@@ -15,6 +15,14 @@ scripts:
           pm.expect(body).to.have.property("version");
           pm.expect(body).to.have.property("buildTime");
           pm.expect(body).to.have.property("node");
+      });
+
+      pm.test("Body reports detected hardware encoders", function () {
+          const encoders = pm.response.json().encoders;
+          pm.expect(encoders.mode).to.be.oneOf(["auto", "off", "nvenc", "qsv"]);
+          pm.expect(encoders.nvenc).to.be.an("array");
+          pm.expect(encoders.qsv).to.be.an("array");
+          pm.expect(encoders.failed).to.be.an("array");
       });
     language: text/javascript
 order: 2000

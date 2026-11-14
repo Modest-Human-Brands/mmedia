@@ -7,6 +7,9 @@ interface ImportMetaEnv {
   readonly LIVEKIT_API_KEY: string
   readonly LIVEKIT_API_SECRET: string
 
+  readonly MOTIA_MMEDIA_HW_ACCEL?: string
+  readonly MOTIA_MMEDIA_TEST_FAIL_HW?: string
+
   readonly MOTIA_MMEDIA_APP_VERSION: string
   readonly MOTIA_MMEDIA_APP_BUILD_TIME: string
 

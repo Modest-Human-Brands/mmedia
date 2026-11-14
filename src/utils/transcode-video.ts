@@ -1,19 +1,8 @@
 import { execa } from 'execa'
+import { logger } from 'motia'
 import path from 'node:path'
 
-/**
- * Enhanced capability check to ensure hardware can actually OPEN the encoder,
- * not just that the binary has it compiled.
- */
-async function checkHardwareSupport(encoder: string): Promise<boolean> {
-  try {
-    // We run a 1-frame null test to see if the hardware session actually initializes
-    await execa('ffmpeg', ['-f', 'lavfi', '-i', 'color=c=black:s=64x64', '-frames:v', '1', '-c:v', encoder, '-f', 'null', '-'])
-    return true
-  } catch {
-    return false
-  }
-}
+import { getFunctionalEncoders, logEncoders, markEncodersFailed } from './hw-encoders'
 
 const SEGMENT_DURATION = 4
 const FPS = 30
@@ -30,26 +19,16 @@ const AUDIO_VARIANTS = [
   { bitrate: '128k', channels: 2 },
 ]
 
-export default async function (filePath: string, outputDir: string) {
-  if (!filePath || typeof filePath !== 'string') throw new Error('Invalid filePath')
+const CODECS = [
+  { name: 'av1', sw: 'libsvtav1', hw: ['av1_nvenc', 'av1_qsv'] },
+  { name: 'hevc', sw: 'libx265', hw: ['hevc_nvenc', 'hevc_qsv'] },
+  { name: 'vp9', sw: 'libvpx-vp9', hw: ['vp9_qsv'] },
+  { name: 'avc', sw: 'libx264', hw: ['h264_nvenc', 'h264_qsv'] },
+]
 
-  const absoluteFilePath = path.resolve(filePath)
-  const outputName = path.basename(filePath.split('_').at(-1)!, path.extname(filePath))
-
-  // 1. Identify which hardware encoders are ACTUALLY functional on this machine
-  const candidates = ['h264_nvenc', 'hevc_nvenc', 'av1_nvenc', 'h264_qsv', 'hevc_qsv', 'av1_qsv']
-  const functionalHw = new Set<string>()
-
-  for (const c of candidates) {
-    if (await checkHardwareSupport(c)) functionalHw.add(c)
-  }
-
-  const CODECS = [
-    { name: 'av1', sw: 'libsvtav1', hw: ['av1_nvenc', 'av1_qsv'] },
-    { name: 'hevc', sw: 'libx265', hw: ['hevc_nvenc', 'hevc_qsv'] },
-    { name: 'vp9', sw: 'libvpx-vp9', hw: ['vp9_qsv'] },
-    { name: 'avc', sw: 'libx264', hw: ['h264_nvenc', 'h264_qsv'] },
-  ]
+/** Builds the ffmpeg arguments for the given set of usable hardware encoders (empty set = software only). */
+function buildArgs(absoluteFilePath: string, outputName: string, functionalHw: Set<string>) {
+  const chosen: Record<string, string> = {}
 
   const ffmpegArgs: string[] = ['-y']
 
@@ -75,6 +54,7 @@ export default async function (filePath: string, outputDir: string) {
       const inputLabel = `[v${variant.height}_${codec.name}]`
 
       const encoder = codec.hw.find((h) => functionalHw.has(h)) || codec.sw
+      chosen[codec.name] = encoder
       const isNvenc = encoder.includes('nvenc')
       const isQsv = encoder.includes('qsv')
 
@@ -84,16 +64,9 @@ export default async function (filePath: string, outputDir: string) {
       ffmpegArgs.push(`-g:v:${currentIdx}`, `${GOP_SIZE}`, `-keyint_min:v:${currentIdx}`, `${GOP_SIZE}`)
 
       if (isNvenc) {
-        ffmpegArgs.push(
-          `-rc:v:${currentIdx}`,
-          'vbr',
-          `-cq:v:${currentIdx}`,
-          codec.name === 'avc' ? '23' : '28',
-          `-preset:v:${currentIdx}`,
-          'p4',
-          `-profile:v:${currentIdx}`,
-          codec.name === 'av1' || codec.name === 'hevc' ? 'main' : 'high'
-        )
+        ffmpegArgs.push(`-rc:v:${currentIdx}`, 'vbr', `-cq:v:${currentIdx}`, codec.name === 'avc' ? '23' : '28', `-preset:v:${currentIdx}`, 'p4')
+        // av1_nvenc has no named profiles (passing "main" makes ffmpeg abort), so only set it for h264/hevc
+        if (codec.name !== 'av1') ffmpegArgs.push(`-profile:v:${currentIdx}`, codec.name === 'hevc' ? 'main' : 'high')
       } else if (isQsv) {
         // Intel QSV specific bitrate control
         ffmpegArgs.push(`-global_quality:v:${currentIdx}`, '25', `-preset:v:${currentIdx}`, 'medium')
@@ -148,11 +121,47 @@ export default async function (filePath: string, outputDir: string) {
     mpdFileName
   )
 
-  try {
-    await execa('ffmpeg', ffmpegArgs, { cwd: outputDir })
-    return { success: true, mpdFile: path.join(outputDir, mpdFileName) }
-  } catch (error) {
-    console.error('❌ FFmpeg fatal error:', error)
-    throw error
+  return { ffmpegArgs, mpdFileName, chosen }
+}
+
+export default async function (filePath: string, outputDir: string) {
+  if (!filePath || typeof filePath !== 'string') throw new Error('Invalid filePath')
+
+  const absoluteFilePath = path.resolve(filePath)
+  const outputName = path.basename(filePath.split('_').at(-1)!, path.extname(filePath))
+
+  // Hardware is tried first when available; a failed hardware run is retried once in software
+  const hardware = await getFunctionalEncoders()
+  const attempts = hardware.size > 0 ? [hardware, new Set<string>()] : [new Set<string>()]
+
+  for (const [index, encoders] of attempts.entries()) {
+    const { ffmpegArgs, mpdFileName, chosen } = buildArgs(absoluteFilePath, outputName, encoders)
+    const usedHardware = Object.values(chosen).filter((encoder) => encoders.has(encoder))
+
+    await logEncoders(
+      Object.entries(chosen)
+        .map(([codec, encoder]) => `${codec}:${encoder}`)
+        .join(',')
+    )
+
+    try {
+      // Test hook: simulate a hardware encoder failure to exercise the software fallback
+      if (import.meta.env.MOTIA_MMEDIA_TEST_FAIL_HW === '1' && usedHardware.length > 0) {
+        throw new Error('Simulated hardware encoder failure')
+      }
+
+      await execa('ffmpeg', ffmpegArgs, { cwd: outputDir })
+      return { success: true, mpdFile: path.join(outputDir, mpdFileName) }
+    } catch (error) {
+      if (usedHardware.length === 0 || index === attempts.length - 1) {
+        console.error('❌ FFmpeg fatal error:', error)
+        throw error
+      }
+
+      logger.warn(`Hardware encode failed (${usedHardware.join(', ')}); retrying with software encoders`, { error: error instanceof Error ? error.message.slice(-500) : String(error) })
+      markEncodersFailed(usedHardware)
+    }
   }
+
+  throw new Error('Video transcode failed')
 }

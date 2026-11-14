@@ -61,7 +61,6 @@ flowchart TD
         subgraph Queues ["Background Task Queues"]
             QProcess["Queue: media.process"]
             QTransform["Queue: media.transform"]
-            QStream["Queue: stream.processed"]
         end
 
         StateStore[("KvStore / State Store (media.result)")]
@@ -127,6 +126,23 @@ docker run -d \
   ghcr.io/modest-human-brands/mmedia:latest
 ```
 
+### Hardware encoding (GPU)
+
+Video transcoding uses hardware encoders when the host provides them and falls back to software (`libx264`, `libx265`, `libsvtav1`, `libvpx-vp9`) otherwise. Encoders are probed once per process, logged at startup (`encoders: mode=auto nvenc=[...] qsv=[...]`) and reported by `GET /health`. If a hardware run fails, the job is retried once with software encoders and those hardware encoders are skipped until restart.
+
+| Variable                    | Default | Description                                                                                  |
+| --------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `MOTIA_MMEDIA_HW_ACCEL`     | `auto`  | `auto`, `off`, `nvenc` or `qsv`. Restricts which hardware encoders are considered.           |
+| `MOTIA_MMEDIA_TEST_FAIL_HW` | unset   | Set to `1` to simulate a hardware failure and exercise the software fallback (testing only). |
+
+NVIDIA GPU (needs the NVIDIA Container Toolkit on the host):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+Intel QSV: pass the render device (`--device /dev/dri`, or uncomment `devices` in `docker-compose.yml`). Without either, the container runs on CPU. Images are always transformed on the CPU (Sharp/IPX).
+
 ### Local Development Setup
 
 1. **Clone and install dependencies:**
@@ -191,11 +207,19 @@ curl -X GET http://localhost:3111/health
 ```json
 {
   "status": "OK",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "buildTime": "2026-10-16T12:00:00.000Z",
-  "node": "worker-node-01"
+  "node": "worker-node-01",
+  "encoders": {
+    "mode": "auto",
+    "nvenc": ["h264", "hevc", "av1"],
+    "qsv": [],
+    "failed": []
+  }
 }
 ```
+
+`encoders` lists the hardware encoders found at startup (cached once per process). `failed` lists encoders that errored during a job and were switched to software until the next restart.
 
 ---
 
@@ -521,13 +545,11 @@ curl -X POST http://localhost:3111/stream/stop \
 
 Motia orchestrates asynchronous jobs across dedicated worker queues configured in `src/job/`:
 
-| Topic / Flow                    | Concurrency | Retries | Step               | Description                                                                                                                                                                         |
-| ------------------------------- | ----------- | ------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `media.process`                 | `1`         | `3`     | `MediaProcessor`   | Downloads uploaded file from R2, extracts metadata, standardizes asset filename, uploads to `processed/` path, cleans up temporary source, and sends progress webhooks (60%, 100%). |
-| `media.transform`               | `2`         | `3`     | `MediaTransformer` | Executes IPX image resizing/conversion or FFmpeg DASH transcoding, saves output to disk cache, and updates `stateManager` (`media.result`).                                         |
-| `media.file.metadata.extracted` | `1`         | `0`     | `MediaNotionSync`  | Creates a Notion asset database entry with extracted metadata and dimensions.                                                                                                       |
-| `stream.processed`              | `1`         | `0`     | `StreamUpload`     | Uploads finalized stream artifacts to target cloud buckets.                                                                                                                         |
-| `stream.stopped`                | `1`         | `0`     | Event Consumer     | Emitted upon room termination for downstream cleanup.                                                                                                                               |
+| Topic / Flow      | Concurrency | Retries | Step               | Description                                                                                                                                                                         |
+| ----------------- | ----------- | ------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.process`   | `1`         | `3`     | `MediaProcessor`   | Downloads uploaded file from R2, extracts metadata, standardizes asset filename, uploads to `processed/` path, cleans up temporary source, and sends progress webhooks (60%, 100%). |
+| `media.transform` | `2`         | `3`     | `MediaTransformer` | Executes IPX image resizing/conversion or FFmpeg DASH transcoding, saves output to disk cache, and updates `stateManager` (`media.result`).                                         |
+| `stream.stopped`  | `1`         | `0`     | Event Consumer     | Emitted upon room termination for downstream cleanup.                                                                                                                               |
 
 ---
 
@@ -535,29 +557,56 @@ Motia orchestrates asynchronous jobs across dedicated worker queues configured i
 
 The service is configured via environment variables (loaded through `.env` in development or Docker environment injection in production):
 
-| Variable                           | Type     | Default         | Description                                                                   |
-| ---------------------------------- | -------- | --------------- | ----------------------------------------------------------------------------- |
-| `NODE_ENV`                         | `string` | `"development"` | Application environment (`development` \| `production`).                      |
-| `HOSTNAME`                         | `string` | System hostname | Host node identifier reported by `/health`.                                   |
-| `MOTIA_APP_VERSION`                | `string` | None            | App version injected into `/health` response.                                 |
-| `MOTIA_APP_BUILD_TIME`             | `string` | None            | Build timestamp injected into `/health` response.                             |
-| `MOTIA_DRIVE_R2_ENDPOINT`          | `string` | Required        | Cloudflare R2 / S3 API endpoint for the drive storage bucket.                 |
-| `MOTIA_DRIVE_R2_BUCKET`            | `string` | Required        | Bucket name containing incoming uploads and drive assets.                     |
-| `MOTIA_DRIVE_R2_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                                 |
-| `MOTIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                             |
-| `MOTIA_DRIVE_R2_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                        |
-| `MOTIA_API_KEY`                    | `string` | Required        | Shared secret expected in the `x-api-key` request header.                     |
-| `MOTIA_DRIVE_URL`                  | `string` | Required        | Base URL of central drive service (notified at `/webhook/uploads/status`).    |
-| `MOTIA_CDN_HOST`                   | `string` | Required        | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs.       |
-| `MOTIA_CDN_R2_ENDPOINT`            | `string` | Required        | S3/R2 API endpoint for public CDN cache bucket.                               |
-| `MOTIA_CDN_R2_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                            |
-| `MOTIA_CDN_R2_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                   |
-| `MOTIA_CDN_R2_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                               |
-| `MOTIA_CDN_R2_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                          |
-| `MOTIA_LIVEKIT_URL`                | `string` | Required        | LiveKit SFU server URL including scheme (e.g. `https://livekit.example.com`). |
-| `MOTIA_LIVEKIT_API_KEY`            | `string` | Required        | LiveKit server API key.                                                       |
-| `MOTIA_LIVEKIT_API_SECRET`         | `string` | Required        | LiveKit server API secret.                                                    |
-| `STREAMS_PORT`                     | `number` | `3114`          | Local port for `StreamModule` internal streams adapter.                       |
+| Variable                                  | Type     | Default         | Description                                                                                                                          |
+| ----------------------------------------- | -------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `NODE_ENV`                                | `string` | `"development"` | Application environment (`development` \| `production`).                                                                             |
+| `HOSTNAME`                                | `string` | System hostname | Host node identifier reported by `/health`.                                                                                          |
+| `MOTIA_MMEDIA_APP_VERSION`                | `string` | None            | App version injected into `/health` response.                                                                                        |
+| `MOTIA_MMEDIA_APP_BUILD_TIME`             | `string` | None            | Build timestamp injected into `/health` response.                                                                                    |
+| `MOTIA_MMEDIA_API_KEY`                    | `string` | Required        | Shared secret expected in the `x-api-key` request header (all routes except `/health`).                                              |
+| `MOTIA_MMEDIA_DRIVE_API_KEY`              | `string` | Required        | Key MMedia sends as `x-api-key` on status callbacks to MDrive (same value as MDrive's `NITRO_MDRIVE_PRIVATE_SERVER_VALIDATION_KEY`). |
+| `MOTIA_MMEDIA_DRIVE_URL`                  | `string` | Required        | Base URL of the MDrive service (notified at `/webhook/uploads/status`).                                                              |
+| `MOTIA_MMEDIA_SITE_URL`                   | `string` | Required        | Public site URL used to build `thumbnailUrl` in the metadata response.                                                               |
+| `MOTIA_MMEDIA_CDN_HOST`                   | `string` | Required        | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs.                                                              |
+| `MOTIA_MMEDIA_DRIVE_R2_ENDPOINT`          | `string` | Required        | Cloudflare R2 / S3 API endpoint for the drive storage bucket.                                                                        |
+| `MOTIA_MMEDIA_DRIVE_R2_BUCKET`            | `string` | Required        | Bucket name containing uploads (`upload/`) and processed assets (`processed/`).                                                      |
+| `MOTIA_MMEDIA_DRIVE_R2_ACCESS_KEY_ID`     | `string` | Required        | S3 access key ID for drive bucket operations.                                                                                        |
+| `MOTIA_MMEDIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required        | S3 secret access key for drive bucket operations.                                                                                    |
+| `MOTIA_MMEDIA_DRIVE_R2_REGION`            | `string` | `"auto"`        | S3 region for drive bucket operations.                                                                                               |
+| `MOTIA_MMEDIA_CDN_R2_ENDPOINT`            | `string` | Required        | S3/R2 API endpoint for the public CDN cache bucket.                                                                                  |
+| `MOTIA_MMEDIA_CDN_R2_BUCKET`              | `string` | Required        | Bucket name for CDN cache and live stream outputs.                                                                                   |
+| `MOTIA_MMEDIA_CDN_R2_ACCESS_KEY_ID`       | `string` | Required        | S3 access key ID for CDN bucket operations.                                                                                          |
+| `MOTIA_MMEDIA_CDN_R2_SECRET_ACCESS_KEY`   | `string` | Required        | S3 secret access key for CDN bucket operations.                                                                                      |
+| `MOTIA_MMEDIA_CDN_R2_REGION`              | `string` | `"auto"`        | S3 region for CDN bucket operations.                                                                                                 |
+| `LIVEKIT_URL`                             | `string` | Required        | LiveKit SFU server URL including scheme (e.g. `https://livekit.example.com`). Shared, unprefixed.                                    |
+| `LIVEKIT_API_KEY`                         | `string` | Required        | LiveKit server API key. Shared, unprefixed.                                                                                          |
+| `LIVEKIT_API_SECRET`                      | `string` | Required        | LiveKit server API secret. Shared, unprefixed.                                                                                       |
+| `MOTIA_MMEDIA_HW_ACCEL`                   | `string` | `"auto"`        | Hardware encoder mode: `auto`, `off`, `nvenc` or `qsv`.                                                                              |
+| `MOTIA_MMEDIA_TEST_FAIL_HW`               | `string` | None            | Set to `1` to simulate a hardware failure (testing only).                                                                            |
+| `STREAMS_PORT`                            | `number` | `3114`          | Local port for `StreamModule` internal streams adapter.                                                                              |
+
+---------------------------------- | -------- | --------------- | ----------------------------------------------------------------------------- |
+| `NODE_ENV` | `string` | `"development"` | Application environment (`development` \| `production`). |
+| `HOSTNAME` | `string` | System hostname | Host node identifier reported by `/health`. |
+| `MOTIA_APP_VERSION` | `string` | None | App version injected into `/health` response. |
+| `MOTIA_APP_BUILD_TIME` | `string` | None | Build timestamp injected into `/health` response. |
+| `MOTIA_DRIVE_R2_ENDPOINT` | `string` | Required | Cloudflare R2 / S3 API endpoint for the drive storage bucket. |
+| `MOTIA_DRIVE_R2_BUCKET` | `string` | Required | Bucket name containing incoming uploads and drive assets. |
+| `MOTIA_DRIVE_R2_ACCESS_KEY_ID` | `string` | Required | S3 access key ID for drive bucket operations. |
+| `MOTIA_DRIVE_R2_SECRET_ACCESS_KEY` | `string` | Required | S3 secret access key for drive bucket operations. |
+| `MOTIA_DRIVE_R2_REGION` | `string` | `"auto"` | S3 region for drive bucket operations. |
+| `MOTIA_API_KEY` | `string` | Required | Shared secret expected in the `x-api-key` request header. |
+| `MOTIA_DRIVE_URL` | `string` | Required | Base URL of central drive service (notified at `/webhook/uploads/status`). |
+| `MOTIA_CDN_HOST` | `string` | Required | Public CDN domain (e.g. `https://cdn.example.com`) for master HLS URLs. |
+| `MOTIA_CDN_R2_ENDPOINT` | `string` | Required | S3/R2 API endpoint for public CDN cache bucket. |
+| `MOTIA_CDN_R2_BUCKET` | `string` | Required | Bucket name for CDN cache and live stream outputs. |
+| `MOTIA_CDN_R2_ACCESS_KEY_ID` | `string` | Required | S3 access key ID for CDN bucket operations. |
+| `MOTIA_CDN_R2_SECRET_ACCESS_KEY` | `string` | Required | S3 secret access key for CDN bucket operations. |
+| `MOTIA_CDN_R2_REGION` | `string` | `"auto"` | S3 region for CDN bucket operations. |
+| `MOTIA_LIVEKIT_URL` | `string` | Required | LiveKit SFU server URL including scheme (e.g. `https://livekit.example.com`). |
+| `MOTIA_LIVEKIT_API_KEY` | `string` | Required | LiveKit server API key. |
+| `MOTIA_LIVEKIT_API_SECRET` | `string` | Required | LiveKit server API secret. |
+| `STREAMS_PORT` | `number` | `3114` | Local port for `StreamModule` internal streams adapter. |
 
 ---
 

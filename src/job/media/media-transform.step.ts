@@ -13,12 +13,16 @@ import ensureDir from 'src/utils/ensure-dir'
 import generateThumbnail from 'src/utils/generate-thumbnail'
 import r2GetFileStream from 'src/utils/r2-get-file-stream'
 import r2Drive from 'src/utils/r2-drive'
+import { logEncoders } from 'src/utils/hw-encoders'
 
 const fs = createStorage({
   driver: fsDriver({ base: './static' }),
 })
 
 const MAX_RETRIES = 3
+
+// One line at startup: which hardware encoders this node can use
+void logEncoders()
 
 export const config = {
   name: 'MediaTransformWorker',
