@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.11
+
+[compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.10...v0.1.11)
+
+### 🚀 Enhancements
+
+- Update Dockerfile for Debian base, add GPU support in docker-compose, and enhance health check ([1b1700d](https://github.com/Modest-Human-Brands/mmedia/commit/1b1700d))
+- Update environment variables, enhance webhook handling, and refactor media processing logic ([627b9c7](https://github.com/Modest-Human-Brands/mmedia/commit/627b9c7))
+- Enhance hardware encoding support, update health check response ([9f5f993](https://github.com/Modest-Human-Brands/mmedia/commit/9f5f993))
+
+### 💅 Refactors
+
+- Migrate from Cloudflare R2 to S3-compatible storage ([51b48c5](https://github.com/Modest-Human-Brands/mmedia/commit/51b48c5))
+
+### ❤️ Contributors
+
+- Shirsendu Bairagi ([@shba007](https://github.com/shba007))
+
 ## v0.1.10
 
 [compare changes](https://github.com/Modest-Human-Brands/mmedia/compare/v0.1.9...v0.1.10)
