@@ -1,0 +1,13 @@
+# CPU-only by default. For NVIDIA GPU encoding add the override:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+services:
+  mmedia:
+    image: ghcr.io/modest-human-brands/mmedia:latest
+    container_name: mmedia
+    env_file: .env.prod
+    ports:
+      - '3111:3111'
+    restart: unless-stopped
+    # Intel QSV: uncomment to pass the render device
+    # devices:
+    #   - /dev/dri:/dev/dri

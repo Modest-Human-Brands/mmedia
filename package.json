@@ -26,7 +26,7 @@
     "start": "motia start",
     "clean": "rm -rf .motia dist",
     "docker:build": "docker build --build-arg VERSION=dev --build-arg BUILD_TIME=now -t mmedia:dev .",
-    "docker:start": "docker run --detach --name mmedia-dev --env-file .env.prod -p 3500:3000 mmedia:dev"
+    "docker:start": "docker run --detach --name mmedia-dev --env-file .env.prod -p 3111:3111 mmedia:dev"
   },
   "dependencies": {
     "aws4fetch": "^1.0.20",
