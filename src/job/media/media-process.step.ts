@@ -1,5 +1,4 @@
 import { queue, logger, Handlers, StepConfig } from 'motia'
-import { $fetch } from 'ofetch'
 import { createStorage } from 'unstorage'
 import fsDriver from 'unstorage/drivers/fs'
 import s3Driver from 'unstorage/drivers/s3'
@@ -7,7 +6,9 @@ import z from 'zod'
 import { Readable, Writable } from 'node:stream'
 import { createWriteStream } from 'node:fs'
 
+import ensureDir from 'src/utils/ensure-dir'
 import getMediaMetadata from 'src/utils/get-media-metadata'
+import notifyDrive from 'src/utils/notify-drive'
 import r2Drive from 'src/utils/r2-drive'
 import r2GetAllFiles from 'src/utils/r2-get-all-files'
 import r2GetFileStream from 'src/utils/r2-get-file-stream'
@@ -27,17 +28,9 @@ const r2DriveStorage = createStorage({
   }),
 })
 
-function getMediaKind(filename: string): 'photo' | 'audio' | 'video' {
-  const ext = filename.split('.').pop()?.toLowerCase() || ''
-  if (['jpg', 'jpeg', 'png', 'webp', 'cr2', 'tiff', 'gif'].includes(ext)) return 'photo'
-  if (['mp3', 'wav', 'm4a', 'flac', 'ogg'].includes(ext)) return 'audio'
-  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return 'video'
-  return 'photo'
-}
-
 export const config = {
   name: 'MediaProcessor',
-  description: 'Asynchronously processes files from storage by stripping metadata, extraction, and renaming',
+  description: 'Asynchronously processes uploaded files: metadata extraction and copy to the processed/ prefix',
   flows: ['media-process-flow'],
   triggers: [
     queue('media.process', {
@@ -47,57 +40,39 @@ export const config = {
         sourceKey: z.string(),
         orgId: z.string(),
         projectId: z.string(),
-        uploadId: z.string(),
-        batchId: z.string(),
+        filename: z.string(),
       }),
     }),
   ],
 } as const satisfies StepConfig
 
 export const handler: Handlers<typeof config> = async (input) => {
-  const { sourceKey, orgId, projectId, uploadId, batchId } = input as { sourceKey: string; orgId: string; projectId: string; uploadId: string; batchId: string }
+  const { sourceKey, orgId, projectId, filename } = input as { sourceKey: string; orgId: string; projectId: string; filename: string }
 
-  const filenameWithExt = sourceKey.split('/').pop() || ''
-  const dotIndex = filenameWithExt.lastIndexOf('.')
-  const ext = dotIndex > 0 ? filenameWithExt.slice(dotIndex) : ''
-  const nameWithoutExt = dotIndex > 0 ? filenameWithExt.slice(0, dotIndex) : filenameWithExt
+  // MDrive owns the file name; the processed object keeps it unchanged
+  const destinationKey = `processed/${orgId}/${projectId}/${filename}`
 
-  const originalNameClean = nameWithoutExt.split('-').slice(0, -2).join('-')
-  const filename = `${originalNameClean}${ext}`
-  const mediaKind = getMediaKind(filename)
+  // Retries and duplicate R2 events: skip the copy if a previous run already wrote the processed file
+  const processedExists = (
+    await r2GetAllFiles(
+      r2Drive,
+      {
+        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
+        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
+      },
+      { prefix: destinationKey }
+    )
+  ).includes(destinationKey)
 
-  const orgNumericId = Number(orgId.split('-').pop()) || 0
-  const projNumericId = Number(projectId.split('-').pop()) || 0
-
-  // Numbering is per project: only look at files already processed for this org/project
-  const existingFiles = await r2GetAllFiles(
-    r2Drive,
-    {
-      endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT!,
-      bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET!,
-    },
-    { prefix: `processed/${orgId}/${projectId}/` }
-  )
-  const existingNames = existingFiles.map((key) => (key.split('/').pop() || '').replace(/\.[^.]+$/, ''))
-
-  const patternRegex = /^(photo|audio|video)-\d{5}-\d{4}-(\d{4})-\d{3}$/
-  const match = originalNameClean.match(patternRegex)
-
-  const nextMediaId = match ? Number.parseInt(match[2], 10) : Math.max(...existingNames.map((n) => Number.parseInt(n.match(patternRegex)?.[2] || '0', 10)), 0) + 1
-
-  const nextVariantId = match ? Math.max(...existingNames.map((n) => Number.parseInt(n.match(new RegExp(`^(photo|audio|video)-\\d{5}-\\d{4}-${match[2]}-(\\d{3})`))?.[2] || '-1', 10)), -1) + 1 : 0
-
-  const paddedMedia = String(nextMediaId).padStart(4, '0')
-  const newMediaId = `${mediaKind}-${String(orgNumericId).padStart(5, '0')}-${String(projNumericId).padStart(4, '0')}-${paddedMedia}-${String(nextVariantId).padStart(3, '0')}${ext}`
-
-  const destinationKey = `processed/${orgId}/${projectId}/${newMediaId}`
-
-  const mediaId = encodeURI(sourceKey).replaceAll('/', '_')
+  const readKey = processedExists ? destinationKey : sourceKey
+  const mediaId = encodeURI(readKey).replaceAll('/', '_')
   const sourcePath = `./static/source/${mediaId}`
   const storageSourceKey = `source/${mediaId}`
 
   try {
-    const { stream } = await r2GetFileStream(r2Drive, encodeURI(sourceKey), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
+    await ensureDir('./static/source')
+
+    const { stream } = await r2GetFileStream(r2Drive, encodeURI(readKey), import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT, import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET)
 
     await stream.pipeTo(Writable.toWeb(createWriteStream(sourcePath)))
 
@@ -105,65 +80,36 @@ export const handler: Handlers<typeof config> = async (input) => {
     logger.info('Metadata extraction complete', { mediaKind: metadata.kind })
 
     // Webhook Notification: Phase 1 Complete (60%)
-    await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
-      method: 'PUT',
-      body: {
-        batchId,
-        projectId,
-        uploadId,
-        filename,
-        status: 'processing',
-        progressPercent: 60,
-        mediaId: newMediaId,
-        error: null,
-        data: { metadata },
-      },
-    })
+    await notifyDrive({ filename, projectId, status: 'processing', progressPercent: 60, error: null, data: { metadata } })
 
-    const fileBuffer = await fs.getItemRaw(storageSourceKey)
-    const fileStream = Readable.toWeb(Readable.from(fileBuffer))
+    if (!processedExists) {
+      const fileBuffer = await fs.getItemRaw(storageSourceKey)
+      const fileStream = Readable.toWeb(Readable.from(fileBuffer))
 
-    await r2PutFileStream(r2Drive, destinationKey, fileStream, fileBuffer ? fileBuffer.byteLength : 0, {
-      endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT,
-      bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET,
-    })
-    await r2DriveStorage.del(sourceKey)
+      await r2PutFileStream(r2Drive, destinationKey, fileStream, fileBuffer ? fileBuffer.byteLength : 0, {
+        endpoint: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_ENDPOINT,
+        bucket: import.meta.env.MOTIA_MMEDIA_DRIVE_R2_BUCKET,
+      })
+    }
 
     // Webhook Notification: Phase 2 Complete (100%)
-    await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
-      method: 'PUT',
-      body: {
-        batchId,
-        projectId,
-        uploadId,
-        filename,
-        status: 'completed',
-        progressPercent: 100,
-        mediaId: newMediaId,
-        error: null,
-        data: null,
-      },
+    await notifyDrive({ filename, projectId, status: 'completed', progressPercent: 100, error: null, data: null })
+
+    // Remove the upload copy only after the callback succeeded, so a failed callback never leaves a processed file with no record
+    await r2DriveStorage.del(sourceKey).catch((error_) => {
+      logger.error('Failed to delete upload copy after processing', { sourceKey, error: error_.message })
     })
   } catch (error: any) {
     console.error(error)
 
     // Notify status webhook about processing failure
-    await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
-      method: 'PUT',
-      body: {
-        batchId,
-        projectId,
-        uploadId,
-        filename,
-        status: 'failed',
-        progressPercent: 100,
-        mediaId: null,
-        error: error.message || 'Processing execution pipeline error failed.',
-        data: null,
-      },
+    await notifyDrive({
+      filename,
+      projectId,
+      status: 'failed',
+      progressPercent: 100,
+      error: error.message || 'Processing execution pipeline error failed.',
+      data: null,
     }).catch((error_) => {
       logger.error('Failed to notify status webhook about processing error state', { fetchErr: error_.message })
     })
@@ -171,6 +117,6 @@ export const handler: Handlers<typeof config> = async (input) => {
     // Rethrow error so Motia can trigger configured retries or dead-letter queues
     throw error
   } finally {
-    await fs.removeItem(sourcePath).catch(() => {})
+    await fs.removeItem(storageSourceKey).catch(() => {})
   }
 }

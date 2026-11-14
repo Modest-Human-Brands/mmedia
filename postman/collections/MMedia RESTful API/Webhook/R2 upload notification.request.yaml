@@ -1,5 +1,5 @@
 $kind: http-request
-description: Cloudflare R2 object-created notification. Queues the file for processing.
+description: Cloudflare R2 object-created notification. Queues the file for processing. The key is upload/<orgSlug>/<projectKey>/<name>.<ext>; MDrive owns the name.
 url: '{{base_url}}/webhook/media/uploads'
 method: POST
 headers:
@@ -16,7 +16,7 @@ body:
                 "name": "bucket-dev-media-origin"
               },
               "object": {
-                "key": "upload/red-cat-pictures-3/test-2/wallpaper-3-batch_34373084-up_4c61886a.jpg",
+                "key": "upload/red-cat-pictures-3/test-2/photo-0003-0008-0001-001.jpg",
                 "size": 1886553
               }
             }

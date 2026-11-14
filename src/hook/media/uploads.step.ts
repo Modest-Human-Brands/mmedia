@@ -1,6 +1,6 @@
 import { http, enqueue, logger, type Handlers, type StepConfig } from 'motia'
 import { z } from 'zod'
-import { $fetch } from 'ofetch'
+import notifyDrive from 'src/utils/notify-drive'
 import requireApiKey from 'src/utils/require-api-key'
 
 export const config = {
@@ -13,7 +13,7 @@ export const config = {
       middleware: [requireApiKey],
       responseSchema: {
         401: z.object({ error: z.string() }),
-        202: z.object({ success: z.boolean(), message: z.string() }),
+        202: z.object({ success: z.boolean(), message: z.string(), ignored: z.boolean().optional() }),
         400: z.object({ error: z.string() }),
       },
     }),
@@ -44,34 +44,20 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
   const bucketName = record.s3.bucket.name
   const key = record.s3.object.key
 
-  const [, orgId, projectId, filenameWithExt = ''] = key.split('/')
+  // Only react to uploads: writes under processed/ (our own output) must not re-trigger the pipeline
+  const [prefix, orgId, projectId, filename] = key.split('/')
+  if (prefix !== 'upload') {
+    logger.info('Ignoring object outside upload/', { key })
+    return { status: 202, body: { success: true, ignored: true, message: 'Ignored: not an upload key' } }
+  }
 
-  const dotIndex = filenameWithExt.lastIndexOf('.')
-  const nameWithoutExt = dotIndex > 0 ? filenameWithExt.slice(0, dotIndex) : filenameWithExt
-  const ext = dotIndex > 0 ? filenameWithExt.slice(dotIndex) : ''
-
-  const parts = nameWithoutExt.split('-')
-  const [batchId = '', uploadId = ''] = parts.slice(-2)
-  const originalNameClean = parts.slice(0, -2).join('-')
-  const filename = `${originalNameClean}${ext}`
+  if (!orgId || !projectId || !filename) {
+    return { status: 400, body: { error: 'Key must be upload/<orgSlug>/<projectKey>/<name>.<ext>' } }
+  }
 
   try {
     // Notify the central state webhook that the file was caught and verification processing has begun
-    await $fetch('/webhook/uploads/status', {
-      baseURL: import.meta.env.MOTIA_MMEDIA_DRIVE_URL,
-      method: 'PUT',
-      body: {
-        batchId,
-        projectId,
-        uploadId,
-        filename,
-        status: 'processing',
-        progressPercent: 20,
-        mediaId: null,
-        error: null,
-        data: null,
-      },
-    })
+    await notifyDrive({ filename, projectId, status: 'processing', progressPercent: 20, error: null, data: null })
   } catch (error_: any) {
     logger.error('Failed to notify status webhook about initial processing entry state', { error: error_.message })
   }
@@ -84,12 +70,11 @@ export const handler: Handlers<typeof config> = async ({ request }) => {
       sourceKey: key,
       orgId,
       projectId,
-      uploadId,
-      batchId,
+      filename,
     },
   })
 
-  logger.info('Successfully handed off file upload to background queues extraction step', { uploadId })
+  logger.info('Successfully handed off file upload to background queues extraction step', { filename })
 
   return {
     status: 202,

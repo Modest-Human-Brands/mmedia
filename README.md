@@ -232,7 +232,7 @@ curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata \
   "metadata": {
     "size": 4829104,
     "bitDepth": "8 bit",
-    "resolution": "4032p",
+    "resolution": "3024p",
     "aspectRatio": "4:3",
     "camera": "Apple iPhone 15 Pro",
     "lens": "iPhone 15 Pro back camera",
@@ -244,7 +244,9 @@ curl -X GET http://localhost:3111/media/photo-00001-0002-0003-000/metadata \
 }
 ```
 
-`fps` is included for video. `thumbnailUrl` is built from `MOTIA_SITE_URL`.
+`resolution` is the short side (a 4032x3024 or 3024x4032 photo is `3024p`). `fps` is included for video.
+
+The `metadata` object that `media.process` reports to MDrive (`data.metadata` in the 60% status callback) has the shape `{ kind, format: { width, height, size, duration?, aspectRatio, resolution, ... }, exif?: { camera, lens, shutter, iso, colorProfile, location } }`. `shutter` is a label such as `"1/250"`; `iso` is a number. The flat `camera`, `lens` and `location` fields in `format` are kept for one release. `thumbnailUrl` is built from `MOTIA_SITE_URL`.
 
 **Error Responses:**
 
@@ -313,7 +315,9 @@ For `transform:video`, DASH output is written to `./static/<cacheKey>/` and the 
 
 #### `POST /webhook/media/uploads`
 
-Receives S3/R2 bucket object-creation event notifications. Parses object metadata, notifies the central drive status webhook that processing has started, and dispatches a background task to the `media.process` queue.
+Receives S3/R2 bucket object-creation event notifications for keys shaped `upload/<orgSlug>/<projectKey>/<name>.<ext>`. MDrive owns `<name>` and MMedia never renames it. The handler notifies MDrive (`PUT /webhook/uploads/status` with `x-api-key: $MOTIA_MMEDIA_DRIVE_API_KEY`) that processing started and queues a `media.process` job, which copies the file to `processed/<orgSlug>/<projectKey>/<name>.<ext>`, reports 60% with extracted metadata and 100% when done, then deletes the upload copy.
+
+Keys outside `upload/` (for example MMedia's own `processed/` writes) return `202` with `ignored: true` and are not queued. Limit the R2 event notification rule to the `upload/` prefix and object-create events.
 
 **Request:**
 
@@ -327,7 +331,7 @@ curl -X POST http://localhost:3111/webhook/media/uploads \
         "s3": {
           "bucket": { "name": "production-media-vault" },
           "object": {
-            "key": "upload/org_1/prj_8f92a1b/photo-batch123-up456.jpg",
+            "key": "upload/org_1/prj_8f92a1b/photo-0003-0008-0001-001.jpg",
             "size": 5242880
           }
         }
@@ -344,6 +348,8 @@ curl -X POST http://localhost:3111/webhook/media/uploads \
   "message": "Dispatched optimization request"
 }
 ```
+
+Ignored key: `{"success": true, "ignored": true, "message": "Ignored: not an upload key"}`. Malformed key: `400 {"error": "Key must be upload/<orgSlug>/<projectKey>/<name>.<ext>"}`.
 
 **Edge Integration (Cloudflare Workers):**
 `worker/r2-event.js` provides an out-of-the-box Cloudflare Queue consumer to forward R2 notifications to this endpoint:

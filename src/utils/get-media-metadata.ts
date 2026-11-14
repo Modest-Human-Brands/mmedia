@@ -33,10 +33,20 @@ export interface MediaStream {
   channels?: number
 }
 
+export interface MediaExif {
+  camera?: string
+  lens?: string
+  shutter?: string
+  iso?: number
+  colorProfile?: string
+  location?: { lat: number; lng: number }
+}
+
 export interface MediaMetadata {
   kind: MediaKind
   format: MediaFormat
   stream?: MediaStream
+  exif?: MediaExif
 }
 
 /**
@@ -46,6 +56,21 @@ function getAspectRatio(width: number, height: number): string {
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
   const divisor = gcd(width, height)
   return `${width / divisor}:${height / divisor}`
+}
+
+/**
+ * Helper: Resolution label from the short side (e.g. 1920x1080 and 1080x1920 are both "1080p")
+ */
+function getResolution(width: number, height: number): string {
+  return `${Math.min(width, height)}p`
+}
+
+/**
+ * Helper: Exposure time in seconds to a shutter label ("1/250" or "2s")
+ */
+function getShutter(exposureTime: unknown): string | undefined {
+  if (typeof exposureTime !== 'number' || !(exposureTime > 0)) return undefined
+  return exposureTime >= 1 ? `${exposureTime}s` : `1/${Math.round(1 / exposureTime)}`
 }
 
 function getMediaKind(filePath: string): MediaKind {
@@ -65,7 +90,7 @@ export default async function getMediaMetadata(filePath: string): Promise<MediaM
     const meta = imageMeta(data)
 
     // Extract deep EXIF data gracefully
-    const exif = await exifr.parse(data, { tiff: true, xmp: true, gps: true }).catch(() => ({}))
+    const exif = await exifr.parse(data, { tiff: true, exif: true, xmp: true, gps: true, icc: true }).catch(() => ({}))
 
     if (typeof meta.width !== 'number' || typeof meta.height !== 'number') {
       throw new TypeError(`Could not determine image dimensions for: ${filePath}`)
@@ -75,19 +100,36 @@ export default async function getMediaMetadata(filePath: string): Promise<MediaM
     const cameraModel = exif?.Model
     const camera = cameraMake && cameraModel ? `${cameraMake} ${cameraModel}` : cameraModel || cameraMake
 
+    const lens = exif?.LensModel || exif?.Lens
+    const location = typeof exif?.latitude === 'number' && typeof exif?.longitude === 'number' ? { lat: exif.latitude, lng: exif.longitude } : undefined
+    const iso = Array.isArray(exif?.ISO) ? exif.ISO[0] : (exif?.ISO ?? exif?.ISOSpeedRatings)
+
+    const photoExif: MediaExif = {
+      camera: camera?.trim(),
+      lens,
+      shutter: getShutter(exif?.ExposureTime),
+      iso: typeof iso === 'number' ? iso : undefined,
+      colorProfile: exif?.ProfileDescription || (exif?.ColorSpace === 1 ? 'sRGB' : undefined),
+      location,
+    }
+
     return {
       kind: 'photo',
       format: {
         filename: filePath,
         formatName: meta.type ?? '',
         size: fileStat.size,
-        resolution: `${meta.width}p`,
+        width: meta.width,
+        height: meta.height,
+        resolution: getResolution(meta.width, meta.height),
         aspectRatio: getAspectRatio(meta.width, meta.height),
         bitDepth: exif?.BitsPerSample ? `${exif.BitsPerSample} bit` : undefined,
-        camera: camera?.trim(),
-        lens: exif?.LensModel || exif?.Lens,
-        location: exif?.latitude && exif?.longitude ? { lat: exif.latitude, lng: exif.longitude } : undefined,
+        // Flat copies of the exif fields, kept for one release
+        camera: photoExif.camera,
+        lens,
+        location,
       },
+      exif: Object.values(photoExif).some((value) => value !== undefined) ? photoExif : undefined,
     }
   }
 
@@ -114,7 +156,9 @@ export default async function getMediaMetadata(filePath: string): Promise<MediaM
         duration: Number(data.format.duration),
         size: Number(data.format.size),
         bitRate: Number(data.format.bit_rate),
-        resolution: `${width}p`,
+        width,
+        height,
+        resolution: width && height ? getResolution(width, height) : undefined,
         aspectRatio: width && height ? getAspectRatio(width, height) : undefined,
         bitDepth: videoStream.bits_per_raw_sample ? `${videoStream.bits_per_raw_sample} bit` : videoStream.pix_fmt,
         camera: tags['model'] || tags['make'],
@@ -123,7 +167,7 @@ export default async function getMediaMetadata(filePath: string): Promise<MediaM
       stream: {
         codecName: videoStream.codec_name,
         codecType: videoStream.codec_type,
-        resolution: `${width}p`,
+        resolution: width && height ? getResolution(width, height) : undefined,
         aspectRatio: width && height ? getAspectRatio(width, height) : undefined,
         bitRate: videoStream.bit_rate ? Number(videoStream.bit_rate) : undefined,
         duration: videoStream.duration ? Number(videoStream.duration) : undefined,

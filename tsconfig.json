@@ -15,7 +15,9 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "allowJs": true,
-    "baseUrl": "."
+    "paths": {
+      "src/*": ["./src/*"]
+    }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
